@@ -1,0 +1,84 @@
+<div class="learning-page">
+  <aside class="course-sidebar">
+    <a class="sidebar-home" routerLink="/learn"><span class="home-mark">ML</span><span><strong>机器学习教程</strong><small>循序渐进 · 边学边练</small></span></a>
+    <div class="progress-card">
+      <div class="progress-caption"><span>学习进度</span><strong>{{ progress }}%</strong></div>
+      <div class="progress-track"><span [style.width.%]="progress"></span></div>
+      <small>{{ completed.size }} / {{ lessons.length }} 节已完成</small>
+    </div>
+    <nav class="lesson-nav" aria-label="课程目录">
+      <ng-container *ngFor="let lesson of lessons; let i = index">
+        <div class="nav-group" *ngIf="i === 0 || lessons[i - 1].category !== lesson.category">{{ lesson.category }}</div>
+        <button type="button" class="lesson-link" [class.selected]="activeId === lesson.id" (click)="selectLesson(lesson.id)">
+          <span class="lesson-number">{{ completed.has(lesson.id) ? '✓' : (i + 1 | number:'2.0') }}</span>
+          <span>{{ lesson.title }}</span>
+        </button>
+      </ng-container>
+    </nav>
+    <a class="sidebar-practice" routerLink="/experiment"><span>↗</span> 前往训练中心</a>
+  </aside>
+
+  <main class="lesson-main">
+    <div class="breadcrumbs"><span>课程</span><span>/</span><span>{{ activeLesson.category }}</span><span>/</span><strong>{{ activeLesson.title }}</strong></div>
+    <section class="lesson-heading">
+      <div class="eyebrow"><span class="eyebrow-dot"></span>机器学习基础课程 <span class="duration">◷ {{ activeLesson.duration }}</span></div>
+      <h1>{{ activeLesson.title }}</h1>
+      <p>{{ activeLesson.summary }}</p>
+    </section>
+
+    <div class="lesson-content">
+      <section class="article-section">
+        <h2>本节内容</h2>
+        <p *ngFor="let paragraph of activeLesson.paragraphs">{{ paragraph }}</p>
+      </section>
+
+      <section class="concept-sections" aria-label="分步讲解">
+        <article class="concept-section" *ngFor="let section of activeLesson.sections; let i = index">
+          <div class="concept-index">{{ i + 1 | number:'2.0' }}</div>
+          <div><h3>{{ section.title }}</h3><p>{{ section.body }}</p></div>
+        </article>
+      </section>
+
+      <section class="example-card">
+        <div class="example-label"><span>✳</span> 概念示例</div>
+        <h3>{{ activeLesson.exampleTitle }}</h3>
+        <p>{{ activeLesson.example }}</p>
+        <a routerLink="/experiment" class="example-link">前往训练中心试一试 <span>→</span></a>
+      </section>
+
+      <section class="keypoints">
+        <h2>记住这几点</h2>
+        <ul><li *ngFor="let point of activeLesson.keyPoints"><span class="check">✓</span>{{ point }}</li></ul>
+      </section>
+
+      <section class="self-check">
+        <div class="self-check-label">学完自测</div>
+        <h2>{{ activeLesson.checkQuestion }}</h2>
+        <div class="self-check-options">
+          <button type="button" class="self-check-option" *ngFor="let option of activeLesson.checkOptions; let i = index"
+            [class.chosen]="lessonCheckChoice === i"
+            [class.answer-correct]="lessonCheckSubmitted && i === activeLesson.checkAnswerIndex"
+            [class.answer-wrong]="lessonCheckSubmitted && lessonCheckChoice === i && i !== activeLesson.checkAnswerIndex"
+            [disabled]="lessonCheckSubmitted" (click)="lessonCheckChoice = i">
+            <span class="option-letter">{{ ['A', 'B', 'C', 'D'][i] }}</span><span>{{ option }}</span>
+          </button>
+        </div>
+        <div class="self-check-actions">
+          <button class="answer-toggle" type="button" *ngIf="!lessonCheckSubmitted" [disabled]="lessonCheckChoice === null" (click)="submitLessonCheck()">检查答案 →</button>
+          <button class="answer-toggle" type="button" *ngIf="lessonCheckSubmitted" (click)="resetLessonCheck()">再试一次 ↻</button>
+        </div>
+        <div class="self-check-feedback" *ngIf="lessonCheckSubmitted" [class.is-correct]="lessonCheckChoice === activeLesson.checkAnswerIndex">
+          <strong>{{ lessonCheckChoice === activeLesson.checkAnswerIndex ? '回答正确' : '再复习一下这个知识点' }}</strong>
+          <p>{{ activeLesson.checkAnswer }}</p>
+        </div>
+      </section>
+
+      <div class="lesson-actions">
+        <button class="previous-button" type="button" [disabled]="activeIndex === 0" (click)="goTo(-1)">← 上一节</button>
+        <button class="complete-button" type="button" (click)="markComplete()">{{ completed.has(activeId) ? '✓ 已完成' : '标记为已完成' }}</button>
+        <button class="next-button" type="button" [disabled]="activeIndex === lessons.length - 1" (click)="goTo(1)">下一节 →</button>
+      </div>
+    </div>
+    <footer class="lesson-footer"><span>机器学习，从理解数据开始。</span><span>{{ activeIndex + 1 }} / {{ lessons.length }}</span></footer>
+  </main>
+</div>

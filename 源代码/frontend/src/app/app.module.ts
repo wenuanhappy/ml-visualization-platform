@@ -32,11 +32,13 @@ import { ModelComparisonComponent } from './components/model-comparison/model-co
 import { FeatureSelectionComponent } from './components/feature-selection/feature-selection.component';
 import { AiAssistantComponent } from './components/ai-assistant/ai-assistant.component';
 import { TrainingLogComponent } from './components/training-log/training-log.component';
+import { LearningComponent } from './learning/learning.component';
 
 @NgModule({
   declarations: [
     AppComponent,
     ExperimentComponent,
+    LearningComponent,
     AlgorithmSelectorComponent,
     DatasetSelectorComponent,
     ParamPanelComponent,
