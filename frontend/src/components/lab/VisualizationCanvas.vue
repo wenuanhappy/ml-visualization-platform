@@ -86,14 +86,19 @@ const COLOR_MAP = {
 const chartHost = ref(null)
 let chart = null
 
-const axisOptions = computed(() => props.dataset?.featureNames ?? [])
+const axisOptions = computed(() => {
+  const names = [...(props.dataset?.featureNames ?? [])]
+  const targetName = props.dataset?.targetName
+  if (targetName && !names.includes(targetName)) {
+    names.push(targetName)
+  }
+  return names
+})
 const selectedXName = ref(null)
 const selectedYName = ref(null)
 
 const isPcaView = computed(() => props.algorithmType === 'dimension')
 const pcaDimensions = computed(() => props.model?.projections?.[0]?.length ?? 0)
-
-const usesTarget = computed(() => props.algorithmType === 'regression')
 
 const points = computed(() => props.dataset?.points ?? [])
 
@@ -127,7 +132,10 @@ function onAxisChange(axis, value) {
 }
 
 function featureValue(point, name) {
-  const index = axisOptions.value.indexOf(name)
+  if (name && name === props.dataset?.targetName) {
+    return point.target ?? 0
+  }
+  const index = (props.dataset?.featureNames ?? []).indexOf(name)
   return index >= 0 ? point.features[index] : 0
 }
 
@@ -141,9 +149,7 @@ const pointCoords = computed(() =>
       return { x: point.features[0] ?? 0, y: point.features[1] ?? 0 }
     }
     const x = featureValue(point, selectedXName.value)
-    const y = usesTarget.value && point.target != null
-      ? point.target
-      : featureValue(point, selectedYName.value)
+    const y = featureValue(point, selectedYName.value)
     return { x, y }
   })
 )
@@ -237,9 +243,7 @@ function renderChart() {
   }
 
   const xAxisLabel = isPcaView.value ? 'PC1' : (selectedXName.value || 'Feature X')
-  const yAxisLabel = isPcaView.value
-    ? 'PC2'
-    : (usesTarget.value ? (props.dataset?.targetName || '目标值') : (selectedYName.value || 'Feature Y'))
+  const yAxisLabel = isPcaView.value ? 'PC2' : (selectedYName.value || 'Feature Y')
 
   chart.setOption({
     animation: true,
@@ -305,7 +309,10 @@ onBeforeUnmount(() => {
 function resetAxes() {
   const names = axisOptions.value
   selectedXName.value = names[0] ?? null
-  selectedYName.value = names[1] ?? names[0] ?? null
+  const preferredY = props.algorithmType === 'regression' && props.dataset?.targetName
+    ? props.dataset.targetName
+    : (names[1] ?? names[0] ?? null)
+  selectedYName.value = preferredY
   emit('axes-change', { x: selectedXName.value, y: selectedYName.value })
 }
 
