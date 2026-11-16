@@ -55,6 +55,8 @@
         />
 
         <TrainingLog :entries="logEntries" :status="logStatus" />
+
+        <ModelExplanation :algorithm="algorithm" :explanation="explanation" />
       </aside>
     </div>
   </div>
@@ -66,8 +68,10 @@ import VisualizationCanvas from '@/components/lab/VisualizationCanvas.vue'
 import EvaluationPanel from '@/components/lab/EvaluationPanel.vue'
 import ParamPanel from '@/components/lab/ParamPanel.vue'
 import TrainingLog from '@/components/lab/TrainingLog.vue'
+import ModelExplanation from '@/components/lab/ModelExplanation.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
+import { buildExplanation } from '@/services/explanations'
 
 const algorithms = ALGORITHMS
 
@@ -93,6 +97,12 @@ const score = computed(() => session.value?.accuracy ?? null)
 const scoreLabel = computed(() => session.value?.scoreLabel ?? '得分')
 const finished = computed(() => session.value?.status === 'finished')
 const logStatus = computed(() => (finished.value ? 'completed' : session.value?.status ?? 'idle'))
+
+const explanation = computed(() => buildExplanation({
+  algorithmName: session.value ? algorithmId.value : '',
+  progress: totalSteps.value ? currentStep.value / totalSteps.value : 0,
+  parameters: parameterValues.value
+}))
 
 const projectionNote = computed(() => {
   if (algorithmId.value === 'pca') {
