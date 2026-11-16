@@ -44,6 +44,11 @@
         />
 
         <EvaluationPanel :algorithm-type="algorithmType" :session="session" :dataset="dataset" />
+
+        <div class="aux-row">
+          <ComparisonPanel />
+          <FeatureSelectionPanel />
+        </div>
       </div>
 
       <aside class="lab-side">
@@ -72,6 +77,8 @@ import ParamPanel from '@/components/lab/ParamPanel.vue'
 import TrainingLog from '@/components/lab/TrainingLog.vue'
 import ModelExplanation from '@/components/lab/ModelExplanation.vue'
 import CaseLibrary from '@/components/lab/CaseLibrary.vue'
+import ComparisonPanel from '@/components/lab/ComparisonPanel.vue'
+import FeatureSelectionPanel from '@/components/lab/FeatureSelectionPanel.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 import { buildExplanation } from '@/services/explanations'
@@ -407,6 +414,12 @@ onMounted(async () => {
 }
 
 .lab-main,
+.aux-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
 .lab-side {
   display: flex;
   flex-direction: column;

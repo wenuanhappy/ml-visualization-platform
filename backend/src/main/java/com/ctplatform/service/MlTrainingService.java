@@ -31,6 +31,12 @@ public interface MlTrainingService {
     /** 把模型投影到指定的两个维度上 */
     ApiResponse<MlProjectionDto> projection(Long sessionId, String xName, String yName);
 
+    /** 多算法对比 */
+    ApiResponse<List<java.util.Map<String, Object>>> comparison(java.util.Map<String, Object> body);
+
+    /** 特征子集训练 */
+    ApiResponse<MlTrainingResponse> featureSelection(java.util.Map<String, Object> body);
+
     /** 复位到未开始状态 */
     ApiResponse<MlTrainingResponse> reset(Long sessionId);
 }

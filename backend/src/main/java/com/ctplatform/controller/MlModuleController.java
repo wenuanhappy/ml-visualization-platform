@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 机器学习模块接口（第 08 组新增）。
@@ -65,6 +66,18 @@ public class MlModuleController {
                                                    @RequestParam("x") String x,
                                                    @RequestParam("y") String y) {
         return mlTrainingService.projection(id, x, y);
+    }
+
+    /** 多算法对比：把每个配置都训练到底，返回指标 */
+    @PostMapping("/comparison")
+    public ApiResponse<List<Map<String, Object>>> comparison(@RequestBody Map<String, Object> body) {
+        return mlTrainingService.comparison(body);
+    }
+
+    /** 特征选择：只在选中的特征子集上训练 */
+    @PostMapping("/feature-selection")
+    public ApiResponse<MlTrainingResponse> featureSelection(@RequestBody Map<String, Object> body) {
+        return mlTrainingService.featureSelection(body);
     }
 
     /** 复位 */

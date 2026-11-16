@@ -623,6 +623,138 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         return Math.round(value * 10000.0) / 10000.0;
     }
 
+    // ==================== 对比 / 特征选择 ====================
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public ApiResponse<List<java.util.Map<String, Object>>> comparison(java.util.Map<String, Object> body) {
+        Long datasetId = asLong(body.get("datasetId"));
+        if (datasetId == null) {
+            return ApiResponse.badRequest("datasetId 不能为空");
+        }
+        MlDataset dataset = datasetMapper.selectById(datasetId);
+        if (dataset == null) {
+            return ApiResponse.error(404, "数据集不存在");
+        }
+        Object rawConfigs = body.get("configs");
+        if (!(rawConfigs instanceof List<?> configs) || configs.isEmpty()) {
+            return ApiResponse.badRequest("configs 不能为空");
+        }
+        try {
+            MlSimulationEngine.Dataset parsed = toEngineDataset(dataset);
+            List<java.util.Map<String, Object>> items = new ArrayList<>();
+            for (Object raw : configs) {
+                java.util.Map<String, Object> config = (java.util.Map<String, Object>) raw;
+                String algorithm = String.valueOf(config.get("algorithm"));
+                String alias = config.get("alias") == null ? algorithm : String.valueOf(config.get("alias"));
+                java.util.Map<String, Object> parameters = config.get("parameters") instanceof java.util.Map
+                        ? (java.util.Map<String, Object>) config.get("parameters")
+                        : java.util.Map.of();
+                if (!isSupported(algorithm)) {
+                    continue;
+                }
+                int totalSteps = totalSteps(algorithm, parsed, parameters);
+                MlTrainingSession transientSession = new MlTrainingSession();
+                transientSession.setAlgorithm(algorithm);
+                transientSession.setDatasetId(dataset.getId());
+                transientSession.setParameters(objectMapper.writeValueAsString(parameters));
+                transientSession.setCurrentStep(Math.max(1, totalSteps));
+                transientSession.setTotalSteps(totalSteps);
+                transientSession.setStatus("finished");
+                MlTrainingResponse response = buildResponse(transientSession, dataset, parsed);
+
+                java.util.Map<String, Object> item = new java.util.LinkedHashMap<>();
+                item.put("alias", alias);
+                item.put("algorithm", algorithm);
+                item.put("accuracy", response.getAccuracy());
+                item.put("loss", response.getLoss());
+                item.put("scoreLabel", response.getScoreLabel());
+                item.put("totalSteps", totalSteps);
+                items.add(item);
+            }
+            return ApiResponse.success(items);
+        } catch (Exception e) {
+            return ApiResponse.error(500, "对比计算失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public ApiResponse<MlTrainingResponse> featureSelection(java.util.Map<String, Object> body) {
+        Long datasetId = asLong(body.get("datasetId"));
+        String algorithm = body.get("algorithm") == null ? null : String.valueOf(body.get("algorithm"));
+        if (datasetId == null || algorithm == null) {
+            return ApiResponse.badRequest("datasetId / algorithm 不能为空");
+        }
+        MlDataset dataset = datasetMapper.selectById(datasetId);
+        if (dataset == null) {
+            return ApiResponse.error(404, "数据集不存在");
+        }
+        try {
+            MlSimulationEngine.Dataset full = toEngineDataset(dataset);
+            List<String> selected = new ArrayList<>();
+            if (body.get("features") instanceof List<?> features) {
+                for (Object feature : features) {
+                    selected.add(String.valueOf(feature));
+                }
+            }
+            MlSimulationEngine.Dataset filtered = filterFeatures(full, selected);
+            java.util.Map<String, Object> parameters = body.get("parameters") instanceof java.util.Map
+                    ? (java.util.Map<String, Object>) body.get("parameters")
+                    : java.util.Map.of();
+            int totalSteps = totalSteps(algorithm, filtered, parameters);
+
+            MlTrainingSession transientSession = new MlTrainingSession();
+            transientSession.setAlgorithm(algorithm);
+            transientSession.setDatasetId(dataset.getId());
+            transientSession.setParameters(objectMapper.writeValueAsString(parameters));
+            transientSession.setCurrentStep(Math.max(1, totalSteps));
+            transientSession.setTotalSteps(totalSteps);
+            transientSession.setStatus("finished");
+            return ApiResponse.success(buildResponse(transientSession, dataset, filtered));
+        } catch (Exception e) {
+            return ApiResponse.error(500, "特征选择训练失败: " + e.getMessage());
+        }
+    }
+
+    /** 只保留选中的特征维度；回归目标与标签不受影响 */
+    private MlSimulationEngine.Dataset filterFeatures(MlSimulationEngine.Dataset dataset, List<String> selected) {
+        if (selected == null || selected.isEmpty()) {
+            return dataset;
+        }
+        List<Integer> indices = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (String name : selected) {
+            int index = dataset.featureNames().indexOf(name);
+            if (index >= 0) {
+                indices.add(index);
+                names.add(name);
+            }
+        }
+        if (indices.isEmpty()) {
+            return dataset;
+        }
+        List<MlSimulationEngine.Point> points = new ArrayList<>(dataset.points().size());
+        for (MlSimulationEngine.Point point : dataset.points()) {
+            double[] features = new double[indices.size()];
+            for (int i = 0; i < indices.size(); i++) {
+                features[i] = point.features()[indices.get(i)];
+            }
+            points.add(new MlSimulationEngine.Point(features, point.target(), point.label()));
+        }
+        return new MlSimulationEngine.Dataset(names, dataset.targetName(), dataset.classNames(), points);
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Long.parseLong(text.trim());
+        }
+        return null;
+    }
+
     private List<MlTrainingResponse.MetricPoint> toMetrics(List<MlSimulationEngine.MetricPoint> history, int upto) {
         List<MlTrainingResponse.MetricPoint> metrics = new ArrayList<>();
         for (MlSimulationEngine.MetricPoint point : history) {
