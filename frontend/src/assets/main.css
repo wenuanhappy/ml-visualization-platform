@@ -1,0 +1,14 @@
+:root {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #1f2937;
+  background: #eef2f9;
+  -webkit-font-smoothing: antialiased;
+}
