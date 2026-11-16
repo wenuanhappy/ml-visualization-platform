@@ -59,6 +59,8 @@
         <ModelExplanation :algorithm="algorithm" :explanation="explanation" />
       </aside>
     </div>
+
+    <CaseLibrary :active-case-id="activeCaseId" :guidance="guidance" @load-case="loadCase" />
   </div>
 </template>
 
@@ -69,9 +71,11 @@ import EvaluationPanel from '@/components/lab/EvaluationPanel.vue'
 import ParamPanel from '@/components/lab/ParamPanel.vue'
 import TrainingLog from '@/components/lab/TrainingLog.vue'
 import ModelExplanation from '@/components/lab/ModelExplanation.vue'
+import CaseLibrary from '@/components/lab/CaseLibrary.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 import { buildExplanation } from '@/services/explanations'
+import { buildGuidanceState, caseById } from '@/services/cases'
 
 const algorithms = ALGORITHMS
 
@@ -87,6 +91,7 @@ const projection = ref(null)
 const algorithm = computed(() => algorithms.find(item => item.id === algorithmId.value) || algorithms[0])
 const parameterValues = ref(defaultParameterValues(algorithm.value))
 const logEntries = ref([])
+const activeCaseId = ref('')
 
 const algorithmType = computed(() => algorithm.value.type ?? 'regression')
 const model = computed(() => session.value?.modelData ?? {})
@@ -97,6 +102,11 @@ const score = computed(() => session.value?.accuracy ?? null)
 const scoreLabel = computed(() => session.value?.scoreLabel ?? '得分')
 const finished = computed(() => session.value?.status === 'finished')
 const logStatus = computed(() => (finished.value ? 'completed' : session.value?.status ?? 'idle'))
+
+const guidance = computed(() => buildGuidanceState(
+  activeCaseId.value || null,
+  session.value ?? { status: 'idle', currentStep: 0, totalSteps: 0 }
+))
 
 const explanation = computed(() => buildExplanation({
   algorithmName: session.value ? algorithmId.value : '',
@@ -153,6 +163,31 @@ async function loadDatasets() {
   }
 }
 
+async function loadCase(caseId) {
+  const item = caseById(caseId)
+  if (!item) {
+    return
+  }
+  activeCaseId.value = caseId
+  algorithmId.value = item.algorithmId
+  const values = defaultParameterValues(algorithm.value)
+  for (const [key, value] of Object.entries(item.parameterPreset)) {
+    if (key in values) {
+      values[key] = value
+    }
+  }
+  parameterValues.value = values
+
+  const target = datasets.value.find(entry => entry.code === item.datasetCode)
+  if (target) {
+    datasetId.value = target.id
+    await loadDataset(target.id)
+  }
+  session.value = null
+  projection.value = null
+  resetTrainingLog()
+}
+
 async function loadDataset(id) {
   const response = await getDataset(id)
   dataset.value = response.data
@@ -161,10 +196,12 @@ async function loadDataset(id) {
 }
 
 async function onDatasetChange() {
+  activeCaseId.value = ''
   await loadDataset(datasetId.value)
 }
 
 async function onAlgorithmChange() {
+  activeCaseId.value = ''
   session.value = null
   projection.value = null
   parameterValues.value = defaultParameterValues(algorithm.value)
