@@ -40,12 +40,15 @@
       :projection-note="projectionNote"
       @axes-change="onAxesChange"
     />
+
+    <EvaluationPanel :algorithm-type="algorithmType" :session="session" :dataset="dataset" />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import VisualizationCanvas from '@/components/lab/VisualizationCanvas.vue'
+import EvaluationPanel from '@/components/lab/EvaluationPanel.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 
 const algorithms = [

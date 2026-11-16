@@ -320,6 +320,7 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         }
         model.setProjections(projections);
         model.setExplainedVariance(pca.explainedVariance());
+        model.setPcaComponents(pca.components());
         response.setMetrics(List.of());
         response.setLoss(0.0);
         response.setAccuracy(Math.round(Math.min(1.0, cumulative) * 10000.0) / 10000.0);

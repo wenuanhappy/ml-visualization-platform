@@ -76,6 +76,8 @@ public class MlTrainingResponse {
         private List<List<Double>> projections;
         /** 每个主成分解释的方差占比 */
         private List<Double> explainedVariance;
+        /** 主成分载荷（每个主成分在各原始维度上的系数） */
+        private List<List<Double>> pcaComponents;
 
         // ===== 决策树 =====
         private List<TreeNode> tree;
