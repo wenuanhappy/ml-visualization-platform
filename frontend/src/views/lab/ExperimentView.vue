@@ -53,6 +53,8 @@
           @parameter-change="onParameterChange"
           @reset-defaults="resetDefaults"
         />
+
+        <TrainingLog :entries="logEntries" :status="logStatus" />
       </aside>
     </div>
   </div>
@@ -63,6 +65,7 @@ import { computed, onMounted, ref } from 'vue'
 import VisualizationCanvas from '@/components/lab/VisualizationCanvas.vue'
 import EvaluationPanel from '@/components/lab/EvaluationPanel.vue'
 import ParamPanel from '@/components/lab/ParamPanel.vue'
+import TrainingLog from '@/components/lab/TrainingLog.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 
@@ -79,6 +82,7 @@ const axes = ref({ x: null, y: null })
 const projection = ref(null)
 const algorithm = computed(() => algorithms.find(item => item.id === algorithmId.value) || algorithms[0])
 const parameterValues = ref(defaultParameterValues(algorithm.value))
+const logEntries = ref([])
 
 const algorithmType = computed(() => algorithm.value.type ?? 'regression')
 const model = computed(() => session.value?.modelData ?? {})
@@ -88,6 +92,7 @@ const loss = computed(() => session.value?.loss ?? null)
 const score = computed(() => session.value?.accuracy ?? null)
 const scoreLabel = computed(() => session.value?.scoreLabel ?? '得分')
 const finished = computed(() => session.value?.status === 'finished')
+const logStatus = computed(() => (finished.value ? 'completed' : session.value?.status ?? 'idle'))
 
 const projectionNote = computed(() => {
   if (algorithmId.value === 'pca') {
@@ -142,6 +147,7 @@ async function loadDataset(id) {
   const response = await getDataset(id)
   dataset.value = response.data
   session.value = null
+  resetTrainingLog()
 }
 
 async function onDatasetChange() {
@@ -152,6 +158,36 @@ async function onAlgorithmChange() {
   session.value = null
   projection.value = null
   parameterValues.value = defaultParameterValues(algorithm.value)
+  resetTrainingLog()
+}
+
+function resetTrainingLog() {
+  logEntries.value = algorithm.value && dataset.value
+    ? [{ step: 0, text: `Preset ready: ${algorithm.value.displayName} on ${dataset.value.name}.`, tone: 'neutral' }]
+    : []
+}
+
+function appendTrainingLog(text, tone, step) {
+  logEntries.value = [...logEntries.value, { step, text, tone }].slice(-8)
+}
+
+/** 对照原项目 appendProgressLog：第 1 步、进度 35%、进度 70% 各打一条 */
+function appendProgressLog(progress, step) {
+  if (step <= 0) return
+  const has = keyword => logEntries.value.some(entry => entry.text.includes(keyword))
+
+  if (step === 1) {
+    appendTrainingLog('First update received. Loss starts moving from the baseline.', 'neutral', step)
+    return
+  }
+  if (progress >= 1) return
+  if (progress >= 0.7 && !has('stabilizing')) {
+    appendTrainingLog('Boundary and metrics are stabilizing. The model is close to convergence.', 'success', step)
+    return
+  }
+  if (progress >= 0.35 && !has('clearer')) {
+    appendTrainingLog('Loss is dropping and the score trend is getting clearer.', 'success', step)
+  }
 }
 
 function onParameterChange({ paramName, value }) {
@@ -175,6 +211,7 @@ async function ensureSession() {
     parameters: toBackendParameters(algorithm.value, parameterValues.value)
   })
   session.value = response.data
+  resetTrainingLog()
 }
 
 async function startTraining() {
@@ -184,6 +221,10 @@ async function startTraining() {
     while (session.value && session.value.status !== 'finished') {
       const response = await stepSession(session.value.sessionId)
       session.value = response.data
+      appendProgressLog(
+        session.value.totalSteps ? session.value.currentStep / session.value.totalSteps : 0,
+        session.value.currentStep
+      )
       await refreshProjection()
       await new Promise(resolve => setTimeout(resolve, 16))
     }
@@ -200,6 +241,10 @@ async function singleStep() {
     await ensureSession()
     const response = await stepSession(session.value.sessionId)
     session.value = response.data
+    appendProgressLog(
+      session.value.totalSteps ? session.value.currentStep / session.value.totalSteps : 0,
+      session.value.currentStep
+    )
     await refreshProjection()
   } catch (error) {
     notify('单步失败：' + error.message)
