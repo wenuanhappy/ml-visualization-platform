@@ -1,0 +1,75 @@
+package com.ctplatform.controller;
+
+import com.ctplatform.dto.ApiResponse;
+import com.ctplatform.dto.MlDatasetDto;
+import com.ctplatform.dto.MlProjectionDto;
+import com.ctplatform.dto.MlTrainRequest;
+import com.ctplatform.dto.MlTrainingResponse;
+import com.ctplatform.service.MlTrainingService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+/**
+ * 机器学习模块接口（第 08 组新增）。
+ *
+ * <p>挂在 {@code /api/ml} 前缀下，不改动已有的 {@code /api/auth}、{@code /api/modules} 等接口。</p>
+ */
+@RestController
+@RequestMapping("/api/ml")
+public class MlModuleController {
+
+    @Autowired
+    private MlTrainingService mlTrainingService;
+
+    /** 数据集列表 */
+    @GetMapping("/datasets")
+    public ApiResponse<List<MlDatasetDto.Summary>> listDatasets() {
+        return mlTrainingService.listDatasets();
+    }
+
+    /** 数据集详情（含样本点） */
+    @GetMapping("/datasets/{id}")
+    public ApiResponse<MlDatasetDto> getDataset(@PathVariable("id") Long id) {
+        return mlTrainingService.getDataset(id);
+    }
+
+    /** 新建训练会话 */
+    @PostMapping("/sessions")
+    public ApiResponse<MlTrainingResponse> createSession(@RequestBody MlTrainRequest request) {
+        return mlTrainingService.createSession(request);
+    }
+
+    /** 查询会话状态 */
+    @GetMapping("/sessions/{id}")
+    public ApiResponse<MlTrainingResponse> getSession(@PathVariable("id") Long id) {
+        return mlTrainingService.getSession(id);
+    }
+
+    /** 步进一步 */
+    @PostMapping("/sessions/{id}/step")
+    public ApiResponse<MlTrainingResponse> step(@PathVariable("id") Long id) {
+        return mlTrainingService.step(id);
+    }
+
+    /** 投影到指定两个维度 */
+    @GetMapping("/sessions/{id}/projection")
+    public ApiResponse<MlProjectionDto> projection(@PathVariable("id") Long id,
+                                                   @RequestParam("x") String x,
+                                                   @RequestParam("y") String y) {
+        return mlTrainingService.projection(id, x, y);
+    }
+
+    /** 复位 */
+    @PostMapping("/sessions/{id}/reset")
+    public ApiResponse<MlTrainingResponse> reset(@PathVariable("id") Long id) {
+        return mlTrainingService.reset(id);
+    }
+}

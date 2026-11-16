@@ -46,7 +46,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import VisualizationCanvas from '@/components/lab/VisualizationCanvas.vue'
-import { createSession, getDataset, getDatasets, resetSession, stepSession } from '@/api/ml'
+import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 
 const algorithms = [
   { id: 'linear_regression', name: '线性回归', type: 'regression' },
@@ -66,6 +66,7 @@ const session = ref(null)
 const busy = ref(false)
 const notice = ref('')
 const axes = ref({ x: null, y: null })
+const projection = ref(null)
 
 const algorithmType = computed(
   () => algorithms.find(item => item.id === algorithmId.value)?.type ?? 'regression'
@@ -79,74 +80,31 @@ const scoreLabel = computed(() => session.value?.scoreLabel ?? '得分')
 const finished = computed(() => session.value?.status === 'finished')
 
 const projectionNote = computed(() => {
-  if (algorithmId.value !== 'pca') return ''
-  return 'PCA 视图：散点坐标为主成分投影，颜色保留原始类别。'
+  if (algorithmId.value === 'pca') {
+    return 'PCA 视图：散点坐标为主成分投影，颜色保留原始类别。'
+  }
+  return projection.value?.note ?? ''
 })
 
-/** 回归线 / 分类边界直接来自后端；决策树按已展开的分裂现算线段 */
-const overlayLines = computed(() => {
-  if (algorithmId.value === 'pca' || algorithmId.value === 'k_means') {
-    return []
-  }
-  if (algorithmId.value === 'decision_tree') {
-    return buildTreeSegments()
-  }
-  const line = model.value.regressionLine
-  return line && line.length === 2 ? [line] : []
-})
+/** 画布上的线全部来自后端投影接口，前端不再自己算 */
+const overlayLines = computed(() => projection.value?.lines ?? [])
 
 function onAxesChange(next) {
   axes.value = next
+  refreshProjection()
 }
 
-function featureIndex(name) {
-  return (dataset.value?.featureNames ?? []).indexOf(name)
-}
-
-function buildTreeSegments() {
-  const nodes = model.value.tree ?? []
-  const revealed = model.value.revealedSplits ?? 0
-  if (!nodes.length || revealed <= 0) return []
-
-  const points = dataset.value?.points ?? []
-  const xIdx = featureIndex(axes.value.x)
-  const yIdx = featureIndex(axes.value.y)
-  if (xIdx < 0 || yIdx < 0) return []
-
-  const xs = points.map(point => point.features[xIdx] ?? 0)
-  const ys = points.map(point => point.features[yIdx] ?? 0)
-  let partitions = [
-    { nodeId: 0, x1: Math.min(...xs), x2: Math.max(...xs), y1: Math.min(...ys), y2: Math.max(...ys) }
-  ]
-  const segments = []
-
-  const splits = nodes
-    .filter(node => node.splitOrder >= 0 && node.splitOrder < revealed)
-    .sort((a, b) => a.splitOrder - b.splitOrder)
-
-  for (const split of splits) {
-    const index = partitions.findIndex(item => item.nodeId === split.id)
-    if (index < 0) continue
-    const part = partitions[index]
-    if (split.featureIndex === xIdx) {
-      segments.push([[split.threshold, part.y1], [split.threshold, part.y2]])
-      partitions.splice(
-        index,
-        1,
-        { nodeId: split.leftId, x1: part.x1, x2: split.threshold, y1: part.y1, y2: part.y2 },
-        { nodeId: split.rightId, x1: split.threshold, x2: part.x2, y1: part.y1, y2: part.y2 }
-      )
-    } else if (split.featureIndex === yIdx) {
-      segments.push([[part.x1, split.threshold], [part.x2, split.threshold]])
-      partitions.splice(
-        index,
-        1,
-        { nodeId: split.leftId, x1: part.x1, x2: part.x2, y1: part.y1, y2: split.threshold },
-        { nodeId: split.rightId, x1: part.x1, x2: part.x2, y1: split.threshold, y2: part.y2 }
-      )
-    }
+async function refreshProjection() {
+  if (!session.value || !axes.value.x || !axes.value.y) {
+    projection.value = null
+    return
   }
-  return segments
+  try {
+    const response = await getProjection(session.value.sessionId, axes.value.x, axes.value.y)
+    projection.value = response.data
+  } catch (error) {
+    projection.value = null
+  }
 }
 
 function formatNumber(value) {
@@ -201,6 +159,7 @@ async function startTraining() {
     while (session.value && session.value.status !== 'finished') {
       const response = await stepSession(session.value.sessionId)
       session.value = response.data
+      await refreshProjection()
       await new Promise(resolve => setTimeout(resolve, 16))
     }
   } catch (error) {
@@ -216,6 +175,7 @@ async function singleStep() {
     await ensureSession()
     const response = await stepSession(session.value.sessionId)
     session.value = response.data
+    await refreshProjection()
   } catch (error) {
     notify('单步失败：' + error.message)
   } finally {
@@ -229,6 +189,7 @@ async function resetTraining() {
   try {
     const response = await resetSession(session.value.sessionId)
     session.value = response.data
+    projection.value = null
   } finally {
     busy.value = false
   }

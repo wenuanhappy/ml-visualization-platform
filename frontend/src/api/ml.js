@@ -22,3 +22,5 @@ export const getDataset = id => client.get(`/api/ml/datasets/${id}`)
 export const createSession = data => client.post('/api/ml/sessions', data)
 export const stepSession = id => client.post(`/api/ml/sessions/${id}/step`)
 export const resetSession = id => client.post(`/api/ml/sessions/${id}/reset`)
+export const getProjection = (id, x, y) =>
+  client.get(`/api/ml/sessions/${id}/projection`, { params: { x, y } })
