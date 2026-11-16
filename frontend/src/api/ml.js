@@ -1,28 +1,26 @@
-import axios from 'axios'
+import request from '@/utils/request'
 
-const client = axios.create({
-  baseURL: '',
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' }
-})
+/**
+ * 机器学习模块接口（第 08 组）
+ *
+ * 与 ct-platform-v2 的 api 层写法一致：统一走 @/utils/request。
+ * 这样本文件可以原样同步到主平台，不需要任何文本替换。
+ */
 
-client.interceptors.response.use(
-  response => {
-    const body = response.data
-    if (body && typeof body.code === 'number' && body.code !== 200) {
-      return Promise.reject(new Error(body.message || '请求失败'))
-    }
-    return body
-  },
-  error => Promise.reject(error)
-)
+export const getDatasets = () => request({ url: '/api/ml/datasets', method: 'get' })
 
-export const getDatasets = () => client.get('/api/ml/datasets')
-export const getDataset = id => client.get(`/api/ml/datasets/${id}`)
-export const createSession = data => client.post('/api/ml/sessions', data)
-export const stepSession = id => client.post(`/api/ml/sessions/${id}/step`)
-export const resetSession = id => client.post(`/api/ml/sessions/${id}/reset`)
-export const compareModels = data => client.post('/api/ml/comparison', data)
-export const featureSelectionTrain = data => client.post('/api/ml/feature-selection', data)
+export const getDataset = id => request({ url: `/api/ml/datasets/${id}`, method: 'get' })
+
+export const createSession = data => request({ url: '/api/ml/sessions', method: 'post', data })
+
+export const stepSession = id => request({ url: `/api/ml/sessions/${id}/step`, method: 'post' })
+
+export const resetSession = id => request({ url: `/api/ml/sessions/${id}/reset`, method: 'post' })
+
 export const getProjection = (id, x, y) =>
-  client.get(`/api/ml/sessions/${id}/projection`, { params: { x, y } })
+  request({ url: `/api/ml/sessions/${id}/projection`, method: 'get', params: { x, y } })
+
+export const compareModels = data => request({ url: '/api/ml/comparison', method: 'post', data })
+
+export const featureSelectionTrain = data =>
+  request({ url: '/api/ml/feature-selection', method: 'post', data })
