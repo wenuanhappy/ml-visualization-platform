@@ -4,7 +4,7 @@
       <label class="field">
         <span>算法</span>
         <select v-model="algorithmId" @change="onAlgorithmChange">
-          <option v-for="item in algorithms" :key="item.id" :value="item.id">{{ item.name }}</option>
+          <option v-for="item in algorithms" :key="item.id" :value="item.id">{{ item.displayName }}</option>
         </select>
       </label>
 
@@ -32,16 +32,29 @@
 
     <p v-if="notice" class="notice">{{ notice }}</p>
 
-    <VisualizationCanvas
+    <div class="lab-body">
+      <div class="lab-main">
+        <VisualizationCanvas
       :dataset="dataset"
       :algorithm-type="algorithmType"
       :model="model"
       :lines="overlayLines"
       :projection-note="projectionNote"
-      @axes-change="onAxesChange"
-    />
+          @axes-change="onAxesChange"
+        />
 
-    <EvaluationPanel :algorithm-type="algorithmType" :session="session" :dataset="dataset" />
+        <EvaluationPanel :algorithm-type="algorithmType" :session="session" :dataset="dataset" />
+      </div>
+
+      <aside class="lab-side">
+        <ParamPanel
+          :algorithm="algorithm"
+          :parameter-values="parameterValues"
+          @parameter-change="onParameterChange"
+          @reset-defaults="resetDefaults"
+        />
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -49,17 +62,11 @@
 import { computed, onMounted, ref } from 'vue'
 import VisualizationCanvas from '@/components/lab/VisualizationCanvas.vue'
 import EvaluationPanel from '@/components/lab/EvaluationPanel.vue'
+import ParamPanel from '@/components/lab/ParamPanel.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
+import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 
-const algorithms = [
-  { id: 'linear_regression', name: '线性回归', type: 'regression' },
-  { id: 'logistic_regression', name: '逻辑回归', type: 'classification' },
-  { id: 'support_vector_machine', name: '支持向量机', type: 'classification' },
-  { id: 'k_means', name: 'K-Means', type: 'clustering' },
-  { id: 'pca', name: 'PCA', type: 'dimension' },
-  { id: 'random_forest', name: '随机森林', type: 'classification' },
-  { id: 'decision_tree', name: '决策树', type: 'classification' }
-]
+const algorithms = ALGORITHMS
 
 const algorithmId = ref('linear_regression')
 const datasetId = ref(null)
@@ -70,10 +77,10 @@ const busy = ref(false)
 const notice = ref('')
 const axes = ref({ x: null, y: null })
 const projection = ref(null)
+const algorithm = computed(() => algorithms.find(item => item.id === algorithmId.value) || algorithms[0])
+const parameterValues = ref(defaultParameterValues(algorithm.value))
 
-const algorithmType = computed(
-  () => algorithms.find(item => item.id === algorithmId.value)?.type ?? 'regression'
-)
+const algorithmType = computed(() => algorithm.value.type ?? 'regression')
 const model = computed(() => session.value?.modelData ?? {})
 const currentStep = computed(() => session.value?.currentStep ?? 0)
 const totalSteps = computed(() => session.value?.totalSteps ?? 0)
@@ -143,6 +150,21 @@ async function onDatasetChange() {
 
 async function onAlgorithmChange() {
   session.value = null
+  projection.value = null
+  parameterValues.value = defaultParameterValues(algorithm.value)
+}
+
+function onParameterChange({ paramName, value }) {
+  parameterValues.value = { ...parameterValues.value, [paramName]: value }
+  // 参数变了，当前会话与投影作废，下次「开始」会用新参数重建
+  session.value = null
+  projection.value = null
+}
+
+function resetDefaults() {
+  parameterValues.value = defaultParameterValues(algorithm.value)
+  session.value = null
+  projection.value = null
 }
 
 async function ensureSession() {
@@ -150,7 +172,7 @@ async function ensureSession() {
   const response = await createSession({
     algorithm: algorithmId.value,
     datasetId: datasetId.value,
-    parameters: {}
+    parameters: toBackendParameters(algorithm.value, parameterValues.value)
   })
   session.value = response.data
 }
@@ -277,6 +299,26 @@ onMounted(async () => {
 
 .stats strong {
   color: #1f2937;
+}
+
+.lab-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .lab-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lab-main,
+.lab-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .notice {
