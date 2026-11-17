@@ -290,6 +290,12 @@ function buildOverlaySeries() {
   return series
 }
 
+/** 2D/3D 切换时画布 DOM 会被重建，旧 ECharts 实例必须销毁，否则画到已移除的节点上（表现为空白） */
+function disposeChart() {
+  chart?.dispose()
+  chart = null
+}
+
 function renderChart() {
   if (!chartHost.value || !props.dataset) {
     return
@@ -345,6 +351,18 @@ function renderChart() {
 
   setTimeout(() => chart?.resize(), 50)
 }
+
+watch(pca3dActive, active => {
+  disposeChart()
+  nextTick(() => {
+    if (active) {
+      renderPca3d()
+    } else {
+      renderChart()
+      renderImportance()
+    }
+  })
+})
 
 function togglePca3d() {
   // 没有 3 维数据时只允许「切回 2D」，不允许进入空白的三维画布
@@ -499,6 +517,9 @@ function renderImportance() {
 }
 
 function resize() {
+  if (!pca3dActive.value && !chart) {
+    renderChart()
+  }
   chart?.resize()
   importanceChart?.resize()
   if (pca3dActive.value) renderPca3d()
