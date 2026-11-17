@@ -130,6 +130,15 @@ const importances = computed(() => props.model?.featureImportances ?? [])
 
 const hasTarget = computed(() => (props.dataset?.points ?? []).some(point => point.target != null))
 
+/** 训练产出的主成分维度名（PC1/PC2/PC3…），PCA 时可与其他算法一样在轴上选择 */
+const pcaAxisNames = computed(() => {
+  if (props.algorithmType !== 'dimension') {
+    return []
+  }
+  const dims = props.model?.projections?.[0]?.length ?? 0
+  return Array.from({ length: dims }, (_, index) => `PC${index + 1}`)
+})
+
 const axisOptions = computed(() => {
   const names = [...(props.dataset?.featureNames ?? [])]
   const targetName = props.dataset?.targetName
@@ -138,10 +147,11 @@ const axisOptions = computed(() => {
   if (hasTarget.value && targetName && !names.includes(targetName)) {
     names.push(targetName)
   }
-  return names
+  return [...pcaAxisNames.value, ...names]
 })
 const selectedXName = ref(null)
 const selectedYName = ref(null)
+const axesTouched = ref(false)
 
 const isPcaView = computed(() => props.algorithmType === 'dimension')
 const pcaDimensions = computed(() => props.model?.projections?.[0]?.length ?? 0)
@@ -174,6 +184,7 @@ function legendColor(label) {
 }
 
 function onAxisChange(axis, value) {
+  axesTouched.value = true
   if (axis === 'x') {
     selectedXName.value = value
   } else {
@@ -183,6 +194,12 @@ function onAxisChange(axis, value) {
 }
 
 function featureValue(point, name) {
+  const pcaIndex = pcaAxisNames.value.indexOf(name)
+  if (pcaIndex >= 0) {
+    const index = points.value.indexOf(point)
+    const projection = props.model?.projections?.[index]
+    return projection?.[pcaIndex] ?? 0
+  }
   if (name && name === props.dataset?.targetName) {
     return point.target ?? 0
   }
@@ -531,17 +548,32 @@ onBeforeUnmount(() => {
 
 function resetAxes() {
   const names = axisOptions.value
-  selectedXName.value = names[0] ?? null
-  const preferredY = hasTarget.value && props.dataset?.targetName
-    ? props.dataset.targetName
-    : (names[1] ?? names[0] ?? null)
-  selectedYName.value = preferredY
+  const pcaNames = pcaAxisNames.value
+  if (pcaNames.length >= 2) {
+    selectedXName.value = pcaNames[0]
+    selectedYName.value = pcaNames[1]
+  } else {
+    selectedXName.value = names[0] ?? null
+    const preferredY = hasTarget.value && props.dataset?.targetName
+      ? props.dataset.targetName
+      : (names[1] ?? names[0] ?? null)
+    selectedYName.value = preferredY
+  }
   emit('axes-change', { x: selectedXName.value, y: selectedYName.value })
 }
 
 // 对照原项目 ngOnChanges：换数据集 / 换算法 / 拿到新的训练结果都退回二维视图
 watch(() => props.dataset, () => {
   pca3dMode.value = false
+  axesTouched.value = false
+})
+
+// 训练产出主成分后自动把坐标轴切到 PC1/PC2，否则画布看起来没变化
+watch(pcaAxisNames, names => {
+  // 至少要有 2 个主成分才切到 PC1/PC2；只有 1 个时先在原始维度上看数据
+  if (!axesTouched.value && names.length >= 2) {
+    resetAxes()
+  }
 })
 
 watch(() => props.algorithmType, () => {
@@ -559,6 +591,7 @@ watch(() => props.model, (next, previous) => {
 watch(
   () => props.dataset,
   () => {
+    axesTouched.value = false
     resetAxes()
     nextTick(() => {
       renderChart()

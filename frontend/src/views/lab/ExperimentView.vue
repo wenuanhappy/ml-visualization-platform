@@ -222,7 +222,9 @@ function onAxesChange(next) {
 }
 
 async function refreshProjection() {
-  if (!session.value || !axes.value.x || !axes.value.y) {
+  const isPcaAxis = name => typeof name === 'string' && name.startsWith('PC')
+  if (!session.value || !axes.value.x || !axes.value.y
+      || isPcaAxis(axes.value.x) || isPcaAxis(axes.value.y)) {
     projection.value = null
     return
   }
