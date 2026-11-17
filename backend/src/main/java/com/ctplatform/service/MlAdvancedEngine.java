@@ -45,7 +45,8 @@ public final class MlAdvancedEngine {
     }
 
     /** 随机森林结果。 */
-    public record ForestResult(List<Integer> assignments, List<MlSimulationEngine.MetricPoint> history) {
+    public record ForestResult(List<Integer> assignments, List<MlSimulationEngine.MetricPoint> history,
+                               double[] importances) {
     }
 
     // 复用主引擎公开的数据结构，避免两套模型
@@ -552,6 +553,7 @@ public final class MlAdvancedEngine {
         int totalSteps = Math.max(1, Math.min(steps, treeCount));
         Random random = new Random(2026L);
 
+        double[] importances = new double[featureCount];
         List<RfNode> forest = new ArrayList<>();
         List<MlSimulationEngine.MetricPoint> history = new ArrayList<>();
         List<Integer> assignments = new ArrayList<>();
@@ -569,7 +571,7 @@ public final class MlAdvancedEngine {
             for (int i = 0; i < features.length; i++) {
                 features[i] = pool.remove(random.nextInt(pool.size()));
             }
-            forest.add(grow(bootstrap, features, 0, maxDepth, classCount, random));
+            forest.add(grow(bootstrap, features, 0, maxDepth, classCount, random, importances));
 
             assignments = vote(forest, points, classCount);
             int correct = 0;
@@ -582,7 +584,7 @@ public final class MlAdvancedEngine {
             double impurity = 1.0 - accuracy;
             history.add(metricPoint(t, round(impurity), round(accuracy)));
         }
-        return new ForestResult(assignments, history);
+        return new ForestResult(assignments, history, importances);
     }
 
     private static final class RfNode {
@@ -598,7 +600,7 @@ public final class MlAdvancedEngine {
     }
 
     private static RfNode grow(List<MlSimulationEngine.Point> rows, int[] features, int depth,
-                               int maxDepth, int classCount, Random random) {
+                               int maxDepth, int classCount, Random random, double[] importances) {
         RfNode node = new RfNode();
         node.classIndex = majority(rows, classCount);
         if (depth >= maxDepth || rows.size() < 4 || gini(rows, classCount) < 1e-6) {
@@ -657,8 +659,9 @@ public final class MlAdvancedEngine {
                 rightRows.add(p);
             }
         }
-        node.left = grow(leftRows, features, depth + 1, maxDepth, classCount, random);
-        node.right = grow(rightRows, features, depth + 1, maxDepth, classCount, random);
+        importances[bestFeature] += bestGain * rows.size();
+        node.left = grow(leftRows, features, depth + 1, maxDepth, classCount, random, importances);
+        node.right = grow(rightRows, features, depth + 1, maxDepth, classCount, random, importances);
         return node;
     }
 

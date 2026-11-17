@@ -34,6 +34,10 @@ public interface MlTrainingService {
     /** 多算法对比 */
     ApiResponse<List<java.util.Map<String, Object>>> comparison(java.util.Map<String, Object> body);
 
+    /** 上传 CSV 数据集（第一个非数值列作为类别，否则最后一列作为回归目标） */
+    ApiResponse<MlDatasetDto.Summary> uploadDataset(String name, String description,
+                                                    org.springframework.web.multipart.MultipartFile file);
+
     /** 特征子集训练 */
     ApiResponse<MlTrainingResponse> featureSelection(java.util.Map<String, Object> body);
 

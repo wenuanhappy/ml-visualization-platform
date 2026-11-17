@@ -24,7 +24,7 @@
     <div class="experiment-layout">
       <div class="left-panel">
         <AlgorithmSelector :algorithms="algorithms" :selected-id="algorithmId" @select="chooseAlgorithm" />
-        <DatasetSelector :datasets="datasets" :selected-id="datasetId" @select="chooseDataset" />
+        <DatasetSelector :datasets="datasets" :selected-id="datasetId" @select="chooseDataset" @uploaded="loadDatasets" />
         <ComparisonPanel />
         <FeatureSelectionPanel />
       </div>

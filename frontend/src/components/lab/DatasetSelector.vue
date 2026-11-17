@@ -19,17 +19,56 @@
       </button>
 
       <div v-if="!datasets.length" class="empty-message">暂无可用数据集。</div>
+
+      <div class="upload-section">
+        <p class="upload-label">上传小型 CSV 数据集</p>
+        <input ref="fileInput" type="file" accept=".csv" @change="onFileChange" />
+        <p v-if="uploading" class="upload-status">上传解析中……</p>
+        <p v-if="message" class="upload-status" :class="{ error: uploadFailed }">{{ message }}</p>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import { uploadDataset } from '@/api/ml'
+
+const emit = defineEmits(['select', 'uploaded'])
+
+const fileInput = ref(null)
+const uploading = ref(false)
+const message = ref('')
+const uploadFailed = ref(false)
+
+async function onFileChange(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  uploading.value = true
+  message.value = ''
+  uploadFailed.value = false
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('name', file.name.replace(/\.csv$/i, ''))
+    form.append('description', '上传的 CSV 数据集')
+    await uploadDataset(form)
+    message.value = '上传成功，已加入数据集列表'
+    emit('uploaded')
+  } catch (error) {
+    uploadFailed.value = true
+    message.value = '上传失败：' + error.message
+  } finally {
+    uploading.value = false
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
 defineProps({
   datasets: { type: Array, default: () => [] },
   selectedId: { type: Number, default: null }
 })
 
-defineEmits(['select'])
 </script>
 
 <style scoped>
@@ -111,5 +150,33 @@ defineEmits(['select'])
 .empty-message {
   font-size: 12px;
   color: #94a3b8;
+}
+
+.upload-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(226, 232, 240, 0.9);
+}
+
+.upload-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.upload-section input[type='file'] {
+  width: 100%;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.upload-status {
+  margin: 6px 0 0;
+  font-size: 10px;
+  color: #15803d;
+}
+
+.upload-status.error {
+  color: #b91c1c;
 }
 </style>

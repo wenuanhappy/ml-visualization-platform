@@ -338,6 +338,8 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         MlAdvancedEngine.ForestResult result =
                 MlAdvancedEngine.trainRandomForest(parsed, intParam(params, "treeCount", FOREST_TREES), maxDepth, currentStep);
         model.setAssignments(result.assignments());
+        model.setFeatureImportances(toImportances(result.importances(), parsed.featureNames()));
+        model.setFeatureImportances(toImportances(result.importances(), parsed.featureNames()));
         response.setMetrics(toMetrics(result.history(), currentStep));
         MlSimulationEngine.MetricPoint last = result.history().get(result.history().size() - 1);
         response.setLoss(last.loss());
@@ -367,6 +369,7 @@ public class MlTrainingServiceImpl implements MlTrainingService {
             nodes.add(dto);
         }
         model.setTree(nodes);
+        model.setFeatureImportances(toImportances(tree.importances(), parsed.featureNames()));
         model.setRevealedSplits(revealed);
         model.setAssignments(MlSimulationEngine.assignClasses(tree.nodes(), parsed.points(), revealed));
         response.setMetrics(toMetrics(tree.history(), revealed));
@@ -375,6 +378,26 @@ public class MlTrainingServiceImpl implements MlTrainingService {
             response.setLoss(last.loss());
             response.setAccuracy(last.score());
         }
+    }
+
+    /** 归一化并按重要性降序（对照原项目 forestImportances） */
+    private List<MlTrainingResponse.FeatureImportance> toImportances(double[] values, List<String> names) {
+        if (values == null || values.length == 0) {
+            return List.of();
+        }
+        double total = 0.0;
+        for (double value : values) {
+            total += value;
+        }
+        List<MlTrainingResponse.FeatureImportance> importances = new ArrayList<>();
+        for (int j = 0; j < values.length && j < names.size(); j++) {
+            MlTrainingResponse.FeatureImportance item = new MlTrainingResponse.FeatureImportance();
+            item.setFeature(names.get(j));
+            item.setImportance(round4(total <= 0 ? 0.0 : values[j] / total));
+            importances.add(item);
+        }
+        importances.sort((left, right) -> Double.compare(right.getImportance(), left.getImportance()));
+        return importances;
     }
 
     private List<Double> toList(double[] values) {
@@ -753,6 +776,132 @@ public class MlTrainingServiceImpl implements MlTrainingService {
             return Long.parseLong(text.trim());
         }
         return null;
+    }
+
+    @Override
+    public ApiResponse<MlDatasetDto.Summary> uploadDataset(String name, String description,
+                                                           org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return ApiResponse.badRequest("文件为空");
+        }
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(file.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+
+            List<String[]> rows = new ArrayList<>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                rows.add(line.split(",", -1));
+                if (rows.size() > 2000) {
+                    break;
+                }
+            }
+            if (rows.size() < 2) {
+                return ApiResponse.badRequest("CSV 至少需要表头与一行数据");
+            }
+
+            boolean hasHeader = !isNumeric(rows.get(0)[0]);
+            List<String> header = new ArrayList<>();
+            int columnCount = rows.get(0).length;
+            for (int j = 0; j < columnCount; j++) {
+                header.add(hasHeader ? rows.get(0)[j].trim() : "特征" + (j + 1));
+            }
+            int startRow = hasHeader ? 1 : 0;
+
+            // 最后一列：全为数值 → 当回归目标；否则当类别标签
+            int lastIndex = columnCount - 1;
+            boolean lastNumeric = true;
+            for (int i = startRow; i < rows.size(); i++) {
+                if (!isNumeric(rows.get(i)[lastIndex])) {
+                    lastNumeric = false;
+                    break;
+                }
+            }
+
+            List<Integer> featureIndexes = new ArrayList<>();
+            for (int j = 0; j < lastIndex; j++) {
+                boolean numeric = true;
+                for (int i = startRow; i < rows.size(); i++) {
+                    if (!isNumeric(rows.get(i)[j])) {
+                        numeric = false;
+                        break;
+                    }
+                }
+                if (numeric) {
+                    featureIndexes.add(j);
+                }
+            }
+            if (featureIndexes.isEmpty()) {
+                return ApiResponse.badRequest("没有可用的数值特征列");
+            }
+
+            List<String> featureNames = new ArrayList<>();
+            for (int index : featureIndexes) {
+                featureNames.add(header.get(index));
+            }
+            List<String> classNames = new ArrayList<>();
+            List<java.util.Map<String, Object>> points = new ArrayList<>();
+            for (int i = startRow; i < rows.size(); i++) {
+                String[] cells = rows.get(i);
+                if (cells.length < columnCount) {
+                    continue;
+                }
+                List<Double> features = new ArrayList<>(featureIndexes.size());
+                for (int index : featureIndexes) {
+                    features.add(Double.parseDouble(cells[index].trim()));
+                }
+                java.util.Map<String, Object> point = new java.util.LinkedHashMap<>();
+                point.put("features", features);
+                if (lastNumeric) {
+                    point.put("target", Double.parseDouble(cells[lastIndex].trim()));
+                } else {
+                    String label = cells[lastIndex].trim();
+                    int classIndex = classNames.indexOf(label);
+                    if (classIndex < 0) {
+                        classNames.add(label);
+                        classIndex = classNames.size() - 1;
+                    }
+                    point.put("label", classIndex);
+                }
+                points.add(point);
+            }
+            if (points.isEmpty()) {
+                return ApiResponse.badRequest("没有解析到有效数据行");
+            }
+
+            MlDataset entity = new MlDataset();
+            entity.setCode("upload_" + System.currentTimeMillis());
+            entity.setName(name == null || name.isBlank() ? file.getOriginalFilename() : name);
+            entity.setDescription(description == null || description.isBlank()
+                    ? "上传的 CSV 数据集" : description);
+            entity.setAlgorithm("linear_regression,decision_tree,random_forest,logistic_regression,"
+                    + "support_vector_machine,k_means,pca");
+            entity.setFeatureNames(objectMapper.writeValueAsString(featureNames));
+            entity.setTargetName(lastNumeric ? header.get(lastIndex) : header.get(lastIndex));
+            if (!classNames.isEmpty()) {
+                entity.setClassNames(objectMapper.writeValueAsString(classNames));
+            }
+            entity.setPointCount(points.size());
+            entity.setDataJson(objectMapper.writeValueAsString(points));
+            datasetMapper.insert(entity);
+            return ApiResponse.success("数据集已上传", toSummary(entity));
+        } catch (Exception e) {
+            return ApiResponse.error(500, "CSV 解析失败: " + e.getMessage());
+        }
+    }
+
+    private boolean isNumeric(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            Double.parseDouble(value.trim());
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private List<MlTrainingResponse.MetricPoint> toMetrics(List<MlSimulationEngine.MetricPoint> history, int upto) {

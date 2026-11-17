@@ -3,6 +3,10 @@
     <header class="canvas-header">
       <span class="title-text">可视化画布</span>
 
+      <button v-if="pca3dAvailable" type="button" class="view-toggle" @click="togglePca3d">
+        {{ pca3dMode ? '切回 2D' : '切换 3D' }}
+      </button>
+
       <span v-if="dataset && !isPcaView" class="axis-pickers">
         <label class="axis-picker">
           <span class="axis-label">X 轴</span>
@@ -35,7 +39,24 @@
       </div>
 
       <div class="chart-area">
-        <div ref="chartHost" class="chart-frame"></div>
+        <div v-if="!pca3dMode" ref="chartHost" class="chart-frame"></div>
+
+        <div v-else class="pca3d-frame">
+          <canvas
+            ref="pca3dHost"
+            class="pca3d-canvas"
+            @pointerdown="onPca3dPointerDown"
+            @pointermove="onPca3dPointerMove"
+            @pointerup="onPca3dPointerUp"
+            @pointerleave="onPca3dPointerUp"
+          ></canvas>
+          <div class="pca3d-hint">
+            <span>按住拖拽可旋转视角</span>
+            <button type="button" class="pca3d-reset" @click="resetPca3dView">重置视角</button>
+          </div>
+        </div>
+
+        <div v-if="importances.length" ref="importanceHost" class="importance-frame"></div>
       </div>
 
       <div v-if="uniqueLabels.length" class="legend">
@@ -55,8 +76,10 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
+
+const init = echarts.init
 
 const emit = defineEmits(['axes-change'])
 
@@ -88,7 +111,21 @@ const COLOR_MAP = {
 }
 
 const chartHost = ref(null)
+const pca3dHost = ref(null)
+const importanceHost = ref(null)
 let chart = null
+let importanceChart = null
+
+// PCA 3D 视图（对照原项目 renderPca3d / onPca3dPointer*）
+const pca3dMode = ref(false)
+const pca3dYaw = ref(-0.62)
+const pca3dPitch = ref(0.38)
+let pca3dDragging = false
+let pca3dLast = { x: 0, y: 0 }
+
+const pca3dAvailable = computed(() => (props.model?.projections?.[0]?.length ?? 0) >= 3)
+
+const importances = computed(() => props.model?.featureImportances ?? [])
 
 const hasTarget = computed(() => (props.dataset?.points ?? []).some(point => point.target != null))
 
@@ -157,7 +194,9 @@ const pointCoords = computed(() =>
     if (isPcaView.value) {
       const projection = props.model?.projections?.[index]
       if (projection?.length) {
-        return { x: projection[0], y: projection[1] ?? 0 }
+        // 只有 1 个主成分时，Y 只做固定幅度错位，避免所有点重叠
+        const y = projection.length < 2 ? ((index % 9) - 4) * 0.05 : projection[1] ?? 0
+        return { x: projection[0], y }
       }
       return { x: point.features[0] ?? 0, y: point.features[1] ?? 0 }
     }
@@ -303,14 +342,165 @@ function renderChart() {
   setTimeout(() => chart?.resize(), 50)
 }
 
+function togglePca3d() {
+  pca3dMode.value = !pca3dMode.value
+  if (pca3dMode.value) {
+    nextTick(() => renderPca3d())
+  } else {
+    nextTick(() => renderChart())
+  }
+}
+
+function resetPca3dView() {
+  pca3dYaw.value = -0.62
+  pca3dPitch.value = 0.38
+  renderPca3d()
+}
+
+function onPca3dPointerDown(event) {
+  pca3dDragging = true
+  pca3dLast = { x: event.clientX, y: event.clientY }
+}
+
+function onPca3dPointerMove(event) {
+  if (!pca3dDragging) return
+  const dx = event.clientX - pca3dLast.x
+  const dy = event.clientY - pca3dLast.y
+  pca3dLast = { x: event.clientX, y: event.clientY }
+  pca3dYaw.value += dx * 0.01
+  pca3dPitch.value = Math.max(-1.2, Math.min(1.2, pca3dPitch.value + dy * 0.01))
+  renderPca3d()
+}
+
+function onPca3dPointerUp() {
+  pca3dDragging = false
+}
+
+/** 对照原项目 renderPca3d：归一化到 [-1,1] 后做偏航/俯仰投影，按深度排序绘制 */
+function renderPca3d() {
+  const canvas = pca3dHost.value
+  const points = props.model?.projections
+  if (!canvas || !points?.length || (points[0]?.length ?? 0) < 3) {
+    return
+  }
+
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  const width = Math.max(320, Math.round(rect.width || canvas.clientWidth || 480))
+  const height = Math.max(260, Math.round(rect.height || canvas.clientHeight || 420))
+  canvas.width = Math.round(width * dpr)
+  canvas.height = Math.round(height * dpr)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, width, height)
+
+  const bounds = [0, 1, 2].map(axis => {
+    const values = points.map(point => point[axis] ?? 0)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const span = max - min || 1
+    return { min, span, mid: (min + max) / 2 }
+  })
+  const normalized = points.map(point =>
+    [0, 1, 2].map(axis => ((point[axis] ?? 0) - bounds[axis].mid) / (bounds[axis].span / 2))
+  )
+
+  const cosYaw = Math.cos(pca3dYaw.value)
+  const sinYaw = Math.sin(pca3dYaw.value)
+  const cosPitch = Math.cos(pca3dPitch.value)
+  const sinPitch = Math.sin(pca3dPitch.value)
+  const centerX = width / 2
+  const centerY = height / 2
+  const radius = Math.min(width, height) * 0.34
+  const focal = 3.4
+
+  const project = p => {
+    const ry = p[0] * cosYaw + p[2] * sinYaw
+    const rz = -p[0] * sinYaw + p[2] * cosYaw
+    const py = p[1] * cosPitch - rz * sinPitch
+    const pz = p[1] * sinPitch + rz * cosPitch
+    const scale = focal / (focal + pz)
+    return { x: centerX + ry * radius * scale, y: centerY - py * radius * scale, depth: pz }
+  }
+
+  const origin = project([0, 0, 0])
+  ctx.lineWidth = 1
+  ;[['PC1', [1.15, 0, 0]], ['PC2', [0, 1.15, 0]], ['PC3', [0, 0, 1.15]]].forEach(([label, end]) => {
+    const tip = project(end)
+    ctx.strokeStyle = 'rgba(100,116,139,0.45)'
+    ctx.beginPath()
+    ctx.moveTo(origin.x, origin.y)
+    ctx.lineTo(tip.x, tip.y)
+    ctx.stroke()
+    ctx.fillStyle = '#475569'
+    ctx.font = '600 11px "Segoe UI", system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, tip.x, tip.y - 10)
+  })
+
+  normalized
+    .map((point, index) => ({ ...project(point), index }))
+    .sort((a, b) => b.depth - a.depth)
+    .forEach(point => {
+      const raw = points[point.index]
+      const label = resolvePointLabel(props.dataset?.points?.[point.index], point.index)
+      const depthScale = 0.78 + (1 - Math.min(1, Math.max(0, (point.depth + 1) / 2))) * 0.5
+      ctx.beginPath()
+      ctx.arc(point.x, point.y, 3.6 * depthScale, 0, Math.PI * 2)
+      ctx.fillStyle = legendColor(label)
+      ctx.globalAlpha = 0.92
+      ctx.fill()
+      ctx.globalAlpha = 1
+      ctx.lineWidth = 0.8
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)'
+      ctx.stroke()
+    })
+}
+
+/** 特征重要性小图（对照原项目 importance-frame） */
+function renderImportance() {
+  if (!importanceHost.value || !importances.value.length) {
+    return
+  }
+  if (!importanceChart) {
+    importanceChart = init(importanceHost.value)
+  }
+  const top = [...importances.value].slice(0, 6).reverse()
+  importanceChart.setOption({
+    grid: { left: 78, right: 16, top: 8, bottom: 8 },
+    tooltip: { trigger: 'axis', backgroundColor: '#111827', textStyle: { color: '#E2E8F0' } },
+    xAxis: { type: 'value', show: false },
+    yAxis: {
+      type: 'category',
+      data: top.map(item => item.feature),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#475569', fontSize: 10 }
+    },
+    series: [{
+      type: 'bar',
+      data: top.map(item => item.importance),
+      barMaxWidth: 10,
+      itemStyle: { color: '#38BDF8', borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', fontSize: 9, color: '#64748b', formatter: '{c}' }
+    }]
+  }, true)
+}
+
 function resize() {
   chart?.resize()
+  importanceChart?.resize()
+  if (pca3dMode.value) renderPca3d()
 }
 
 onMounted(() => {
   window.addEventListener('resize', resize)
   resetAxes()
   renderChart()
+  nextTick(() => renderImportance())
 })
 
 onBeforeUnmount(() => {
@@ -338,7 +528,7 @@ watch(
 )
 
 watch(
-  () => [props.model, props.lines, props.assignments, selectedXName.value, selectedYName.value],
+  () => [props.model, props.lines, props.assignments, importances.value, selectedXName.value, selectedYName.value, pca3dMode.value],
   renderChart,
   { deep: true }
 )
@@ -399,6 +589,50 @@ watch(
 .chart-frame {
   width: 100%;
   height: 460px;
+}
+
+.view-toggle {
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #1d4ed8;
+  background: #eef4ff;
+  border: 1px solid rgba(29, 78, 216, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pca3d-frame {
+  position: relative;
+}
+
+.pca3d-canvas {
+  width: 100%;
+  height: 460px;
+  cursor: grab;
+}
+
+.pca3d-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.pca3d-reset {
+  font-size: 11px;
+  color: #1d4ed8;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.importance-frame {
+  width: 100%;
+  height: 150px;
+  margin-top: 8px;
 }
 
 .axis-hint {

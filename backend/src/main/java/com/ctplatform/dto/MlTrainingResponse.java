@@ -85,6 +85,15 @@ public class MlTrainingResponse {
         private Integer revealedSplits;
         /** 每个样本当前被预测的类别下标，前端据此给散点着色 */
         private List<Integer> assignments;
+
+        /** 特征重要性（决策树 / 随机森林按分裂增益累计） */
+        private List<FeatureImportance> featureImportances;
+    }
+
+    @Data
+    public static class FeatureImportance {
+        private String feature;
+        private Double importance;
     }
 
     @Data

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -40,6 +41,15 @@ public class MlModuleController {
     @GetMapping("/datasets/{id}")
     public ApiResponse<MlDatasetDto> getDataset(@PathVariable("id") Long id) {
         return mlTrainingService.getDataset(id);
+    }
+
+    /** 上传 CSV 数据集 */
+    @PostMapping("/datasets/upload")
+    public ApiResponse<MlDatasetDto.Summary> uploadDataset(
+            @RequestParam("name") String name,
+            @RequestParam(value = "description", required = false) String description,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return mlTrainingService.uploadDataset(name, description, file);
     }
 
     /** 新建训练会话 */

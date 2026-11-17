@@ -20,6 +20,14 @@ export const resetSession = id => request({ url: `/api/ml/sessions/${id}/reset`,
 export const getProjection = (id, x, y) =>
   request({ url: `/api/ml/sessions/${id}/projection`, method: 'get', params: { x, y } })
 
+export const uploadDataset = formData =>
+  request({
+    url: '/api/ml/datasets/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+
 export const compareModels = data => request({ url: '/api/ml/comparison', method: 'post', data })
 
 export const featureSelectionTrain = data =>
