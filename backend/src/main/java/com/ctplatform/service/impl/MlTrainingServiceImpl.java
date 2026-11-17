@@ -271,7 +271,9 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         double defaultRate = svm ? DEFAULT_SVM_RATE : DEFAULT_LEARNING_RATE;
         double learningRate = params.has("learningRate") ? params.get("learningRate").asDouble(defaultRate) : defaultRate;
         String kernel = params.has("kernel") ? params.get("kernel").asText("linear") : "linear";
-        double gamma = params.has("gamma") ? params.get("gamma").asDouble(0.1) : 0.1;
+        double gamma = params.has("gamma")
+                ? params.get("gamma").asDouble(0.5)
+                : 1.0 / Math.max(1, parsed.featureCount());
         MlAdvancedEngine.ClassificationResult result;
         if (!svm) {
             result = MlAdvancedEngine.trainLogisticRegression(parsed, learningRate, currentStep);
@@ -288,6 +290,7 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         model.setBias(result.bias());
         model.setFeatureMeans(toList(result.featureMeans()));
         model.setRegressionLine(result.boundaryLine());
+        model.setBoundaryLines(result.boundaryLines());
         model.setAssignments(result.predictions());
         response.setMetrics(toMetrics(result.history(), currentStep));
         MlSimulationEngine.MetricPoint last = result.history().get(result.history().size() - 1);
@@ -525,12 +528,11 @@ public class MlTrainingServiceImpl implements MlTrainingService {
                                  MlTrainingResponse.ModelData model, String xName, String yName) {
         int xIndex = parsed.featureNames().indexOf(xName);
         int yIndex = parsed.featureNames().indexOf(yName);
-        // 非线性核（poly / rbf）的边界是采样出来的折线，直接用它，不能按线性方程求解
-        List<Double> probe = model.getWeights();
-        if (model.getRegressionLine() != null && model.getRegressionLine().size() > 2
+        // 非线性核（poly / rbf）的边界是采样出来的多段折线，直接返回，不能按线性方程求解
+        if (model.getBoundaryLines() != null && !model.getBoundaryLines().isEmpty()
                 && xIndex == 0 && yIndex == 1) {
             dto.setKind(MlProjectionDto.KIND_DECISION_BOUNDARY);
-            dto.setLines(List.of(model.getRegressionLine()));
+            dto.setLines(model.getBoundaryLines());
             dto.setNote("非线性核（poly / rbf）的决策边界，由网格采样得到。");
             return;
         }

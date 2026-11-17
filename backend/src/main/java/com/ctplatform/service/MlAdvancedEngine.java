@@ -30,6 +30,7 @@ public final class MlAdvancedEngine {
     public record ClassificationResult(double[] weights, double bias,
                                        double[] featureMeans,
                                        List<List<Double>> boundaryLine,
+                                       List<List<List<Double>>> boundaryLines,
                                        List<Integer> predictions,
                                        List<MlSimulationEngine.MetricPoint> history) {
     }
@@ -175,8 +176,11 @@ public final class MlAdvancedEngine {
             rawBias -= rawWeights[j] * normalizer.means()[j];
         }
         List<List<Double>> boundary = boundaryLine(dataset, rawWeights, rawBias);
+        List<List<List<Double>>> boundaryLines = boundary == null
+                ? List.of()
+                : List.of(boundary);
         return new ClassificationResult(rawWeights, round(rawBias), normalizer.means().clone(),
-                boundary, predictions, history);
+                boundary, boundaryLines, predictions, history);
     }
 
     // ==================== 非线性核 SVM（poly / rbf） ====================
@@ -206,11 +210,13 @@ public final class MlAdvancedEngine {
 
         double[] alpha = new double[n];
         double bias = 0.0;
-        double learningRate = 0.6;
         int totalSteps = Math.max(1, steps);
         List<MlSimulationEngine.MetricPoint> history = new ArrayList<>();
 
         for (int step = 1; step <= totalSteps; step++) {
+            // 一个"步"里做多轮扫描，否则 60 步根本收敛不到有意义的边界
+            double learningRate = 0.8 / (1.0 + step * 0.08);
+            for (int epoch = 0; epoch < 8; epoch++) {
             for (int i = 0; i < n; i++) {
                 double score = bias;
                 for (int j = 0; j < n; j++) {
@@ -223,6 +229,7 @@ public final class MlAdvancedEngine {
                     alpha[i] += learningRate;
                     bias += learningRate * y[i];
                 }
+            }
             }
             int correct = 0;
             for (int i = 0; i < n; i++) {
@@ -254,11 +261,14 @@ public final class MlAdvancedEngine {
         }
 
         // 采样出边界折线：把碎段按端点相连拼成折线，取最长的一条
-        List<List<Double>> boundary = sampleKernelBoundary(points, normalizer, featureCount,
+        List<List<List<Double>>> boundaryLines = sampleKernelBoundaries(points, normalizer, featureCount,
                 kernel, g, alpha, y, z, bias);
+        List<List<Double>> boundary = boundaryLines.isEmpty()
+                ? List.of()
+                : boundaryLines.get(0);
 
         return new ClassificationResult(new double[]{0.0}, 0.0, normalizer.means().clone(),
-                boundary, predictions, history);
+                boundary.isEmpty() ? null : boundary, boundaryLines, predictions, history);
     }
 
     private static double kernelValue(String kernel, double gamma, double[] a, double[] b) {
@@ -279,14 +289,14 @@ public final class MlAdvancedEngine {
     }
 
     /** 网格 + marching squares，把核 SVM 的 0 等值线采样成分段折线 */
-    private static List<List<Double>> sampleKernelBoundary(List<MlSimulationEngine.Point> points,
+    private static List<List<List<Double>>> sampleKernelBoundaries(List<MlSimulationEngine.Point> points,
                                                            Normalizer normalizer, int featureCount,
                                                            String kernel, double gamma,
                                                            double[] alpha, double[] y, double[][] z,
                                                            double bias) {
-        List<List<Double>> segments = new ArrayList<>();
+        List<List<List<Double>>> chains = new ArrayList<>();
         if (points.isEmpty() || featureCount < 2) {
-            return segments;
+            return chains;
         }
         double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
         double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
@@ -300,7 +310,7 @@ public final class MlAdvancedEngine {
         double padY = (maxY - minY) * 0.05 + 1e-6;
         minX -= padX; maxX += padX; minY -= padY; maxY += padY;
 
-        int grid = 48;
+        int grid = 40;
         double[][] values = new double[grid + 1][grid + 1];
         for (int i = 0; i <= grid; i++) {
             for (int j = 0; j <= grid; j++) {
@@ -338,12 +348,22 @@ public final class MlAdvancedEngine {
                 }
             }
         }
-        return chainLongest(rawSegments, (maxX - minX) / grid);
+        // 直接返回每一小段：链式拼接在闭合曲线处容易断成几截，导致画布只画出半条线；
+        // 画布对每条折线都画成虚线，短段拼起来就是完整曲线
+        List<List<List<Double>>> segmentsOut = new ArrayList<>(rawSegments.size());
+        for (List<double[]> segment : rawSegments) {
+            List<List<Double>> line = new ArrayList<>(2);
+            for (double[] point : segment) {
+                line.add(List.of(round(point[0]), round(point[1])));
+            }
+            segmentsOut.add(line);
+        }
+        return segmentsOut;
     }
 
-    /** 把碎线段按端点距离贪心串成折线，返回最长的一条（画布每条 series 只画一条线） */
-    private static List<List<Double>> chainLongest(List<List<double[]>> segments, double step) {
-        double tolerance = Math.max(step * 1.5, 1e-9);
+    /** 把碎线段按端点距离贪心串成多条折线，全部返回（画布支持多段） */
+    private static List<List<List<Double>>> chainAll(List<List<double[]>> segments, double step) {
+        double tolerance = Math.max(step * 1.8, 1e-9);
         List<List<double[]>> remaining = new ArrayList<>(segments);
         List<List<double[]>> chains = new ArrayList<>();
         while (!remaining.isEmpty()) {
@@ -373,12 +393,19 @@ public final class MlAdvancedEngine {
             }
             chains.add(chain);
         }
-        List<double[]> best = chains.stream().max((a, b) -> Integer.compare(a.size(), b.size())).orElse(List.of());
-        List<List<Double>> line = new ArrayList<>(best.size());
-        for (double[] point : best) {
-            line.add(List.of(round(point[0]), round(point[1])));
+        List<List<List<Double>>> result = new ArrayList<>();
+        // 过短的碎段是网格采样的毛刺，丢掉；保留主曲线与足够长的分支
+        for (List<double[]> chain : chains) {
+            if (chain.size() < 6) {
+                continue;
+            }
+            List<List<Double>> line = new ArrayList<>(chain.size());
+            for (double[] point : chain) {
+                line.add(List.of(round(point[0]), round(point[1])));
+            }
+            result.add(line);
         }
-        return line;
+        return result;
     }
 
     private static double dist(double[] a, double[] b) {

@@ -68,6 +68,7 @@ export const ALGORITHMS = [
     parameters: [
       { name: 'kernel', displayName: '核函数', type: 'select', default: 'rbf', options: ['linear', 'rbf', 'poly'] },
       numberParam('c', '正则化参数C', 1, 0.1, 4, 0.1),
+      numberParam('gamma', '核宽度 γ', 0.5, 0.05, 2, 0.05),
       numberParam('iterations', '迭代次数', 80, 20, 200, 10, 'steps')
     ]
   },

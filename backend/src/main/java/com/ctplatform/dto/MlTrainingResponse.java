@@ -64,8 +64,10 @@ public class MlTrainingResponse {
         private Double bias;
         /** 各特征的均值，前端在任意两个维度上切片画线时用来把其它维度固定在均值 */
         private List<Double> featureMeans;
-        /** 回归直线或分类决策边界，形如 [[x1,y1],[x2,y2]] */
+        /** 回归直线或线性分类决策边界，形如 [[x1,y1],[x2,y2]] */
         private List<List<Double>> regressionLine;
+        /** 非线性核的决策边界：可能有多条折线 */
+        private List<List<List<Double>>> boundaryLines;
 
         // ===== K-Means =====
         /** 质心坐标（原始特征空间） */

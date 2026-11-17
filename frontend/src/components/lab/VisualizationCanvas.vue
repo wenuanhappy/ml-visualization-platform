@@ -282,6 +282,8 @@ function buildOverlaySeries() {
   const series = props.lines.map(line => ({
     name: isRegression ? '回归线' : '决策边界',
     type: 'line',
+    // 非线性核的边界由几十段短折线组成，逐段做动画会明显卡顿
+    animation: props.lines.length <= 4,
     data: line,
     symbol: 'none',
     lineStyle: isRegression
