@@ -31,10 +31,12 @@ mkdir -p "$DEV"
 
 # ---------- 数据库账号 ----------
 if [ ! -f "$ENV_FILE" ]; then
-  cat > "$ENV_FILE" <<'ENV'
+  # 首次运行生成随机密码，仓库里不出现任何可用的数据库口令
+  RANDOM_PW="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)"
+  cat > "$ENV_FILE" <<ENV
 # 本地开发用的数据库账号（已被 .gitignore 忽略，不要提交）
 DB_USERNAME=ct_app
-DB_PASSWORD=ct_app_dev_2026
+DB_PASSWORD=${RANDOM_PW}
 # 项目自带 MySQL 实例的端口（scripts/db.sh 管理，无需 sudo）
 DB_PORT=3308
 ENV

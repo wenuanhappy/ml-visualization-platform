@@ -84,7 +84,7 @@ ensure_schema() {
   fi
   # 账号幂等创建（密码来自 .dev/env）
   "$MYSQL" --socket="$SOCK" -u root -e "
-    CREATE USER IF NOT EXISTS '${DB_USERNAME:-ct_app}'@'%' IDENTIFIED BY '${DB_PASSWORD:-ct_app_dev_2026}';
+    CREATE USER IF NOT EXISTS '${DB_USERNAME:-ct_app}'@'%' IDENTIFIED BY '${DB_PASSWORD:?需要 DB_PASSWORD}';
     GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USERNAME:-ct_app}'@'%';
     FLUSH PRIVILEGES;" 2>/dev/null || true
 

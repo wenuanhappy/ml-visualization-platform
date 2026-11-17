@@ -84,7 +84,7 @@ ml-visualization-platform/
 # 2. 后端（必须 JDK 17）
 cd backend
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
-DB_USERNAME=ct_app DB_PASSWORD='ct_app_dev_2026' \
+DB_USERNAME=ct_app DB_PASSWORD='取自 .dev/env' \
 SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3308/ct_platform?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true' \
 mvn spring-boot:run
 
