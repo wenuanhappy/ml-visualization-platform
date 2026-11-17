@@ -382,7 +382,10 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         model.setTree(nodes);
         model.setFeatureImportances(toImportances(tree.importances(), parsed.featureNames()));
         model.setRevealedSplits(revealed);
-        model.setAssignments(MlSimulationEngine.assignClasses(tree.nodes(), parsed.points(), revealed));
+        // 一次分裂都没展开时不给预测结果，画布按数据集自带标签着色（原项目复位后也是这样）
+        model.setAssignments(revealed <= 0
+                ? List.of()
+                : MlSimulationEngine.assignClasses(tree.nodes(), parsed.points(), revealed));
         response.setMetrics(toMetrics(tree.history(), revealed));
         if (revealed > 0 && !tree.history().isEmpty()) {
             MlSimulationEngine.MetricPoint last = tree.history().get(Math.min(revealed, tree.history().size() - 1));

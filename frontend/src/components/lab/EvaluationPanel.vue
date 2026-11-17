@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { buildEvaluationState, normalizeLabel, viewModelOf } from '@/services/evaluation'
 import { describePcaComponents } from '@/services/pcaLabels'
@@ -123,6 +123,7 @@ const props = defineProps({
 
 const chartHost = ref(null)
 let chart = null
+let chartElement = null
 
 const state = computed(() => buildEvaluationState({
   algorithmType: props.algorithmType,
@@ -162,8 +163,15 @@ function renderChart() {
   if (!chartHost.value) {
     return
   }
+  // 容器节点换了（PCA 与普通视图切换会重建 DOM）就丢掉旧实例，否则画在已移除的节点上
+  if (chart && chartElement !== chartHost.value) {
+    chart.dispose()
+    chart = null
+    chartElement = null
+  }
   if (!chart) {
     chart = echarts.init(chartHost.value, undefined, { renderer: 'canvas' })
+    chartElement = chartHost.value
   }
 
   const lossLabel = normalizeLabel(state.value.lossLabel)
@@ -264,18 +272,34 @@ function resize() {
   chart?.resize()
 }
 
+let observer = null
+
 onMounted(() => {
   window.addEventListener('resize', resize)
-  renderChart()
+  nextTick(() => {
+    renderChart()
+    // 容器尺寸可能在首帧后才确定（父级布局挤压/懒渲染），尺寸变化时补一次 resize
+    if (chartHost.value && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => chart?.resize())
+      observer.observe(chartHost.value)
+    }
+  })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
+  observer?.disconnect()
+  observer = null
   chart?.dispose()
   chart = null
+  chartElement = null
 })
 
-watch(() => [props.session, props.algorithmType], renderChart, { deep: true })
+watch(
+  () => [props.session, props.algorithmType, props.session?.metrics],
+  () => nextTick(renderChart),
+  { deep: true }
+)
 </script>
 
 <style scoped>
