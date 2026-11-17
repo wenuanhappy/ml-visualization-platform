@@ -3,7 +3,7 @@
 # 关闭机器学习可视化平台的进程。
 #
 #   ./scripts/stop-dev.sh            # 关闭后端 + 自有前端 + 主平台前端
-#   ./scripts/stop-dev.sh --mysql    # 顺便停掉本机 MySQL（需要 sudo）
+#   ./scripts/stop-dev.sh --mysql    # 顺便停掉项目自带的 MySQL 实例（.dev/mysql）
 #
 # 优先按 .dev/*.pid 精确关闭，PID 失效时退回按命令行特征匹配。
 
@@ -52,8 +52,9 @@ pkill -f "ml-visualization-platform/frontend/node_modules/.bin/vite" 2>/dev/null
 pkill -f "ct-platform-v2/frontend/node_modules/.bin/vite" 2>/dev/null && echo "  ✓ 已清理残留主平台前端" || true
 
 if [ "$WITH_MYSQL" -eq 1 ]; then
-  echo "停止 MySQL……"
-  sudo /usr/local/mysql/support-files/mysql.server stop || echo "  · MySQL 停止失败或未运行"
+  bash "$ROOT/scripts/db.sh" stop
+else
+  echo "  · 项目自带数据库仍在运行（要一起停：./scripts/stop-dev.sh --mysql）"
 fi
 
 # 给进程一点优雅退出的时间（Spring Boot 关闭要几秒）

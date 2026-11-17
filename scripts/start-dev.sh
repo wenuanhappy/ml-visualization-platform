@@ -21,7 +21,7 @@ WITH_MYSQL=0
 for arg in "$@"; do
   case "$arg" in
     --with-platform) WITH_PLATFORM=1 ;;
-    --mysql) WITH_MYSQL=1 ;;
+    --mysql) echo "提示：现在默认使用项目自带数据库实例，--mysql 已无作用" ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "未知参数: $arg" >&2; exit 2 ;;
   esac
@@ -35,6 +35,8 @@ if [ ! -f "$ENV_FILE" ]; then
 # 本地开发用的数据库账号（已被 .gitignore 忽略，不要提交）
 DB_USERNAME=ct_app
 DB_PASSWORD=ct_app_dev_2026
+# 项目自带 MySQL 实例的端口（scripts/db.sh 管理，无需 sudo）
+DB_PORT=3308
 ENV
   echo "已生成 ${ENV_FILE}（如需修改账号密码请直接编辑）"
 fi
@@ -87,23 +89,21 @@ wait_for_port() {
   return 1
 }
 
-# ---------- MySQL ----------
-if port_busy 3306; then
-  echo "✓ MySQL 已在 3306 运行"
-elif [ "$WITH_MYSQL" -eq 1 ]; then
-  echo "MySQL 未运行，尝试启动（可能要求输入 sudo 密码）……"
-  sudo /usr/local/mysql/support-files/mysql.server start || {
-    echo "MySQL 启动失败，请手动执行：sudo /usr/local/mysql/support-files/mysql.server start" >&2
-    exit 1
-  }
-  wait_for_port 3306 "MySQL" 30
-else
-  echo "⚠ 3306 上没有 MySQL。数据库没起后端会连不上，可加 --mysql 参数自动启动。" >&2
-fi
+# ---------- 数据库（项目自带实例，无需 sudo） ----------
+export DB_PORT="${DB_PORT:-3308}"
+export DB_NAME="${DB_NAME:-ct_platform}"
+bash "$ROOT/scripts/db.sh" ensure
 
 # ---------- 后端 ----------
 if port_busy 8080; then
-  echo "⚠ 8080 已被占用，跳过后端启动（先跑 ./scripts/stop-dev.sh）"
+  if curl -s -m 2 http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"service":"ct-platform-backend"'; then
+    echo "✓ 后端已在 8080 运行"
+  else
+    echo "✗ 8080 被别的程序占用（检测到不是本项目的后端）。" >&2
+    echo "  常见原因：旧项目的 Docker 容器还在跑 → docker stop ml-platform-backend" >&2
+    echo "  查看占用：lsof -nP -iTCP:8080 -sTCP:LISTEN" >&2
+    exit 1
+  fi
 else
   echo "构建并启动后端……"
   (
@@ -113,6 +113,7 @@ else
 
   (
     cd "$ROOT/backend"
+    SPRING_DATASOURCE_URL="jdbc:mysql://127.0.0.1:${DB_PORT}/${DB_NAME}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true" \
     DB_USERNAME="$DB_USERNAME" DB_PASSWORD="$DB_PASSWORD" \
       nohup java -jar target/ct-platform-backend-1.0.0.jar > "$DEV/backend.log" 2>&1 &
     echo $! > "$DEV/backend.pid"
@@ -154,6 +155,7 @@ echo
 echo "启动完成："
 echo "  自有项目   http://localhost:5174"
 [ "$WITH_PLATFORM" -eq 1 ] && echo "  主平台     http://localhost:5173  →「人工智能」"
+echo "  数据库     127.0.0.1:${DB_PORT}（scripts/db.sh 管理）"
 echo "  后端接口   http://localhost:8080/api/health"
 echo "  日志目录   $DEV"
 echo "  关闭项目   ./scripts/stop-dev.sh"
