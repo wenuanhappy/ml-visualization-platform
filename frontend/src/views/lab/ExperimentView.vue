@@ -185,7 +185,13 @@ const explanation = computed(() => buildExplanation({
   parameters: parameterValues.value
 }))
 
-const projectionNote = computed(() => projection.value?.note ?? '')
+const projectionNote = computed(() => {
+  // PCA 的二维画布现在画的是原始维度，后端那句「不再按原始维度画线」的提示会误导
+  if (algorithmId.value === 'pca') {
+    return ''
+  }
+  return projection.value?.note ?? ''
+})
 
 /** 画布上的线全部来自后端投影接口，前端不再自己算 */
 const overlayLines = computed(() => projection.value?.lines ?? [])
