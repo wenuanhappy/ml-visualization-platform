@@ -11,7 +11,12 @@
       </nav>
     </header>
     <main class="app-main">
-      <router-view />
+      <!-- 对应原项目的 keep-alive-route-reuse.strategy：学习中心切走再切回时保留状态 -->
+      <router-view v-slot="{ Component }">
+        <keep-alive include="LearningView">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
   </div>
 </template>

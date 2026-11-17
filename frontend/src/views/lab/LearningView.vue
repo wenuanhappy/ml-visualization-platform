@@ -260,6 +260,8 @@ import { computed, onMounted, ref } from 'vue'
 import { LESSONS } from '@/services/lessons'
 import { createQuestionBank } from '@/services/questionBank'
 
+defineOptions({ name: 'LearningView' })
+
 const STORAGE_KEY = 'ml-learning-wrong-questions'
 
 const lessons = LESSONS
