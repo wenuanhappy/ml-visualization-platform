@@ -20,6 +20,8 @@ export const resetSession = id => request({ url: `/api/ml/sessions/${id}/reset`,
 export const getProjection = (id, x, y) =>
   request({ url: `/api/ml/sessions/${id}/projection`, method: 'get', params: { x, y } })
 
+export const askAssistant = data => request({ url: '/api/ml/assistant', method: 'post', data })
+
 export const uploadDataset = formData =>
   request({
     url: '/api/ml/datasets/upload',

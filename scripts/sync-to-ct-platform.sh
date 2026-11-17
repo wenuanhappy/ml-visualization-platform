@@ -36,11 +36,13 @@ FILES=(
   # 前端：接口、服务层、组件、页面
   "frontend/src/api/ml.js"
   "frontend/src/services/algorithms.js"
+  "frontend/src/services/pcaLabels.js"
   "frontend/src/services/cases.js"
   "frontend/src/services/evaluation.js"
   "frontend/src/services/explanations.js"
   "frontend/src/services/lessons.js"
   "frontend/src/services/questionBank.js"
+  "frontend/src/components/lab/AiAssistant.vue"
   "frontend/src/components/lab/AlgorithmSelector.vue"
   "frontend/src/components/lab/CaseLibrary.vue"
   "frontend/src/components/lab/DatasetSelector.vue"

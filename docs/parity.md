@@ -17,13 +17,13 @@
 | `components/case-library` | `components/lab/CaseLibrary.vue` + `services/cases.js` | ✅ 五个案例 |
 | `components/model-comparison` | `components/lab/ComparisonPanel.vue` | ✅ 对应后端 `/api/ml/comparison` |
 | `components/feature-selection` | `components/lab/FeatureSelectionPanel.vue` | ✅ 对应后端 `/api/ml/feature-selection` |
-| `components/ai-assistant` | — | ⏭ 按约定跳过 |
+| `components/ai-assistant` | `components/lab/AiAssistant.vue` + `POST /api/ml/assistant` | ✅ 需要 `LLM_API_KEY`，未配置时返回提示 |
 | `experiment/experiment.component` | `views/lab/ExperimentView.vue` | 🟡 训练循环用前端定时驱动，暂停/继续为前端语义 |
 | `learning/learning.component` | `views/lab/LearningView.vue` + `services/lessons.js` + `services/questionBank.js` | ✅ 8 节课 / 200 题 / 错题集 |
 | `services/api.service.ts` | `api/ml.js`（走 `@/utils/request`） | ✅ |
 | `services/learning-guide-data.service.ts` | `services/{algorithms,cases,evaluation,explanations}.js` | 🟡 只迁移了真实指标链路，未搬 mock 兜底数据 |
 | `services/experiment-context.service.ts` | — | ⏭ 单页应用不需要 |
-| `utils/pca-labels.ts` | 载荷矩阵直接由后端 `pcaComponents` 生成 | 🟡 未搬 PC 短标签文案 |
+| `utils/pca-labels.ts` | `services/pcaLabels.js` + 评估面板「主成分含义」 | ✅ |
 
 ## 后端
 

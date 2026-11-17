@@ -38,6 +38,9 @@ public interface MlTrainingService {
     ApiResponse<MlDatasetDto.Summary> uploadDataset(String name, String description,
                                                     org.springframework.web.multipart.MultipartFile file);
 
+    /** AI 助教问答 */
+    String askAssistant(String question, String context);
+
     /** 特征子集训练 */
     ApiResponse<MlTrainingResponse> featureSelection(java.util.Map<String, Object> body);
 

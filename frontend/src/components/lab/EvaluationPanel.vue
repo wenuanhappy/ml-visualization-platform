@@ -18,6 +18,29 @@
         </div>
       </div>
 
+      <div v-if="meanings.length" class="pca-section-label">主成分含义</div>
+      <div v-if="meanings.length" class="pca-meanings">
+        <div v-for="label in meanings" :key="label.index" class="pca-meaning">
+          <div class="pca-meaning-head">
+            <span class="pca-pc">PC{{ label.index + 1 }}</span>
+            <span class="pca-tag">{{ label.shortLabel }}</span>
+            <span v-if="label.ratio !== null" class="pca-meaning-ratio">{{ (label.ratio * 100).toFixed(1) }}%</span>
+          </div>
+          <p class="pca-meaning-desc">{{ label.description }}</p>
+          <div v-if="label.dominant.length" class="pca-chips">
+            <span
+              v-for="feature in label.dominant"
+              :key="feature.name"
+              class="pca-chip"
+              :class="{ 'pca-chip-neg': feature.loading < 0 }"
+            >
+              {{ feature.name }}
+              <b>{{ feature.loading >= 0 ? '+' : '' }}{{ feature.loading.toFixed(2) }}</b>
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div v-if="loadings.length" class="pca-section-label">载荷矩阵</div>
       <div v-if="loadings.length" class="pca-table-wrap">
         <table class="pca-loadings">
@@ -90,6 +113,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { buildEvaluationState, normalizeLabel, viewModelOf } from '@/services/evaluation'
+import { describePcaComponents } from '@/services/pcaLabels'
 
 const props = defineProps({
   algorithmType: { type: String, default: 'regression' },
@@ -111,6 +135,12 @@ const chartPoints = computed(() => state.value.chart ?? [])
 const explained = computed(() => props.session?.modelData?.explainedVariance ?? [])
 const cumulative = computed(() => explained.value.reduce((sum, ratio) => sum + ratio, 0))
 const pcaComponentCount = computed(() => explained.value.length)
+
+const meanings = computed(() => describePcaComponents({
+  pcaComponents: props.session?.modelData?.pcaComponents,
+  featureNames: props.dataset?.featureNames,
+  explainedVariance: explained.value
+}))
 
 const loadings = computed(() => {
   const components = props.session?.modelData?.pcaComponents ?? []
@@ -437,6 +467,70 @@ watch(() => [props.session, props.algorithmType], renderChart, { deep: true })
   text-align: right;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
+}
+
+.pca-meanings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pca-meaning {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.pca-meaning-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pca-tag {
+  padding: 1px 8px;
+  font-size: 10px;
+  color: #1d4ed8;
+  background: #eef4ff;
+  border-radius: 999px;
+}
+
+.pca-meaning-ratio {
+  margin-left: auto;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.pca-meaning-desc {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.pca-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pca-chip {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #0369a1;
+  background: #e0f2fe;
+  border-radius: 999px;
+}
+
+.pca-chip b {
+  margin-left: 4px;
+  font-weight: 700;
+}
+
+.pca-chip-neg {
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
 .pca-table-wrap {

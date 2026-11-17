@@ -90,6 +90,15 @@ public class MlModuleController {
         return mlTrainingService.featureSelection(body);
     }
 
+    /** AI 助教（需要配置 LLM_API_KEY，未配置时返回提示） */
+    @PostMapping("/assistant")
+    public ApiResponse<Map<String, Object>> assistant(@RequestBody Map<String, Object> body) {
+        String question = String.valueOf(body.getOrDefault("question", ""));
+        String context = String.valueOf(body.getOrDefault("context", ""));
+        String answer = mlTrainingService.askAssistant(question, context);
+        return ApiResponse.success(Map.of("answer", answer));
+    }
+
     /** 复位 */
     @PostMapping("/sessions/{id}/reset")
     public ApiResponse<MlTrainingResponse> reset(@PathVariable("id") Long id) {

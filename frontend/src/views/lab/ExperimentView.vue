@@ -87,6 +87,8 @@
     </div>
 
     <CaseLibrary :active-case-id="activeCaseId" :guidance="guidance" @load-case="loadCase" />
+
+    <AiAssistant :context="assistantContext" />
   </div>
 </template>
 
@@ -102,6 +104,7 @@ import ComparisonPanel from '@/components/lab/ComparisonPanel.vue'
 import FeatureSelectionPanel from '@/components/lab/FeatureSelectionPanel.vue'
 import AlgorithmSelector from '@/components/lab/AlgorithmSelector.vue'
 import DatasetSelector from '@/components/lab/DatasetSelector.vue'
+import AiAssistant from '@/components/lab/AiAssistant.vue'
 import { createSession, getDataset, getDatasets, getProjection, resetSession, stepSession } from '@/api/ml'
 import { ALGORITHMS, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 import { buildExplanation } from '@/services/explanations'
@@ -166,6 +169,10 @@ const statusText = computed(() => {
 })
 
 const scorePercent = computed(() => (score.value == null ? '—' : `${(Number(score.value) * 100).toFixed(1)}%`))
+
+const assistantContext = computed(() =>
+  [algorithm.value.displayName, dataset.value?.name].filter(Boolean).join(' / ')
+)
 
 const guidance = computed(() => buildGuidanceState(
   activeCaseId.value || null,

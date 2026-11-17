@@ -904,6 +904,53 @@ public class MlTrainingServiceImpl implements MlTrainingService {
         }
     }
 
+    // ==================== AI 助教 ====================
+
+    @org.springframework.beans.factory.annotation.Value("${llm.endpoint:https://api.openai.com/v1}")
+    private String llmEndpoint;
+
+    @org.springframework.beans.factory.annotation.Value("${llm.model:gpt-3.5-turbo}")
+    private String llmModel;
+
+    @org.springframework.beans.factory.annotation.Value("${llm.api-key:}")
+    private String llmApiKey;
+
+    @Override
+    public String askAssistant(String question, String context) {
+        if (question == null || question.isBlank()) {
+            return "请先输入问题。";
+        }
+        if (llmApiKey == null || llmApiKey.isBlank()) {
+            return "AI 助教尚未配置：请设置环境变量 LLM_API_KEY（可选 LLM_ENDPOINT / LLM_MODEL）后重启后端。";
+        }
+        try {
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("model", llmModel);
+            payload.put("temperature", 0.4);
+            java.util.List<java.util.Map<String, String>> messages = new ArrayList<>();
+            messages.add(java.util.Map.of("role", "system",
+                    "content", "你是机器学习教学平台的助教，用中文简洁回答，结合当前实验上下文。"));
+            messages.add(java.util.Map.of("role", "user",
+                    "content", (context == null || context.isBlank() ? "" : "当前实验：" + context + "\n") + question));
+            payload.put("messages", messages);
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(llmApiKey);
+            org.springframework.http.HttpEntity<java.util.Map<String, Object>> entity =
+                    new org.springframework.http.HttpEntity<>(payload, headers);
+
+            String url = llmEndpoint.replaceAll("/$", "") + "/chat/completions";
+            JsonNode response = objectMapper.readTree(
+                    restTemplate.postForObject(url, entity, String.class));
+            JsonNode content = response.path("choices").path(0).path("message").path("content");
+            return content.isMissingNode() ? "AI 没有返回内容，请稍后再试。" : content.asText();
+        } catch (Exception e) {
+            return "AI 助教调用失败：" + e.getMessage();
+        }
+    }
+
     private List<MlTrainingResponse.MetricPoint> toMetrics(List<MlSimulationEngine.MetricPoint> history, int upto) {
         List<MlTrainingResponse.MetricPoint> metrics = new ArrayList<>();
         for (MlSimulationEngine.MetricPoint point : history) {
