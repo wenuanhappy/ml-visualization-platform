@@ -65,6 +65,10 @@ const props = defineProps({
   algorithmType: { type: String, default: 'regression' },
   // 后端返回的模型：assignments / regressionLine / projections / centroids
   model: { type: Object, default: () => ({}) },
+  // 训练后的分配结果（分类的预测类别 / 聚类的簇号），优先用于着色
+  assignments: { type: Array, default: () => [] },
+  // 质心在当前两个维度上的坐标（来自后端投影接口，kind=centroids）
+  centroids: { type: Array, default: () => [] },
   // 画布要叠加的线段：[[x1,y1],[x2,y2]] 的数组（决策树可能多条）
   lines: { type: Array, default: () => [] },
   projectionNote: { type: String, default: '' }
@@ -86,10 +90,14 @@ const COLOR_MAP = {
 const chartHost = ref(null)
 let chart = null
 
+const hasTarget = computed(() => (props.dataset?.points ?? []).some(point => point.target != null))
+
 const axisOptions = computed(() => {
   const names = [...(props.dataset?.featureNames ?? [])]
   const targetName = props.dataset?.targetName
-  if (targetName && !names.includes(targetName)) {
+  // 只有回归类数据集（点里带 target）才把目标列作为可选维度；
+  // 分类数据集的 targetName 只是标签列名，不能当坐标轴
+  if (hasTarget.value && targetName && !names.includes(targetName)) {
     names.push(targetName)
   }
   return names
@@ -108,6 +116,11 @@ const uniqueLabels = computed(() => {
 })
 
 function resolvePointLabel(point, index) {
+  const assigned = props.assignments?.[index]
+  if (assigned != null) {
+    const named = props.dataset?.classNames?.[assigned]
+    return named ?? `簇 ${assigned + 1}`
+  }
   if (point.label != null) {
     return props.dataset?.classNames?.[point.label] ?? String(point.label)
   }
@@ -204,7 +217,7 @@ function buildOverlaySeries() {
     z: 10
   }))
 
-  const centroids = props.model?.centroids
+  const centroids = props.centroids
   if (props.algorithmType === 'clustering' && centroids?.length) {
     series.push({
       name: '聚类中心',
@@ -309,7 +322,7 @@ onBeforeUnmount(() => {
 function resetAxes() {
   const names = axisOptions.value
   selectedXName.value = names[0] ?? null
-  const preferredY = props.algorithmType === 'regression' && props.dataset?.targetName
+  const preferredY = hasTarget.value && props.dataset?.targetName
     ? props.dataset.targetName
     : (names[1] ?? names[0] ?? null)
   selectedYName.value = preferredY
@@ -325,7 +338,7 @@ watch(
 )
 
 watch(
-  () => [props.model, props.lines, selectedXName.value, selectedYName.value],
+  () => [props.model, props.lines, props.assignments, selectedXName.value, selectedYName.value],
   renderChart,
   { deep: true }
 )

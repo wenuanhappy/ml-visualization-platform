@@ -119,14 +119,21 @@ export function buildEvaluationState({ algorithmType, session }) {
   }
 
   if (!session) {
+    // 原项目在开始训练前也渲染指标卡与轨迹组件，只是数值为空、曲线无点
+    const labels = labelsFor(algorithmType, null)
+    const titles = {
+      regression: '回归质量',
+      clustering: '聚类指标',
+      classification: '评估指标'
+    }
     return {
-      title: '评估指标',
-      subtitle: '选择算法和数据集以开始。',
-      scoreLabel: '得分',
-      lossLabel: '损失',
-      cards: [],
+      title: titles[algorithmType] ?? titles.classification,
+      subtitle: '实验开始后将显示指标和训练曲线。',
+      scoreLabel: labels.scoreLabel,
+      lossLabel: labels.lossLabel,
+      cards: buildMetricCards(algorithmType, null, [], labels, false),
       chart: [],
-      totalSteps: 0
+      totalSteps: 100
     }
   }
 

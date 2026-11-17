@@ -236,30 +236,67 @@ public final class MlAdvancedEngine {
     // ==================== K-Means ====================
 
     /**
-     * Lloyd 迭代。初始质心用 k-means++（固定种子，保证「同一步数重算结果一致」）。
+     * K-Means：逐行对照原项目 TrainingSimulationService.trainKMeans。
+     *
+     * 与原写法保持一致的三处关键点：
+     * 1. 初始质心不是 k-means++，而是沿每个维度的取值范围均匀铺开
+     *    （position = (i+1)/(k+1)，奇数维再加一点错位），因此每步结果可复现；
+     * 2. 距离在**按维度归一化之后**计算，避免量级大的特征主导；
+     * 3. 质心更新带 0.35 动量，逐步靠近簇均值而不是一步跳过去。
      */
     public static ClusterResult trainKMeans(MlSimulationEngine.Dataset dataset, int k, int steps) {
         List<MlSimulationEngine.Point> points = dataset.points();
         int featureCount = dataset.featureCount();
         int clusterCount = Math.max(1, Math.min(k, Math.max(1, points.size())));
+        Normalizer normalizer = fit(dataset);
 
-        Random random = new Random(42L);
-        List<double[]> centroids = initCentroids(points, clusterCount, random);
+        double[] mins = new double[featureCount];
+        double[] ranges = new double[featureCount];
+        for (int j = 0; j < featureCount; j++) {
+            double min = Double.MAX_VALUE;
+            double max = -Double.MAX_VALUE;
+            for (MlSimulationEngine.Point p : points) {
+                min = Math.min(min, p.features()[j]);
+                max = Math.max(max, p.features()[j]);
+            }
+            mins[j] = min;
+            ranges[j] = Math.max(EPS, max - min);
+        }
+
+        // 初始质心：沿取值范围均匀铺开（原项目 initializeCentroids）
+        List<double[]> centroids = new ArrayList<>();
+        for (int i = 0; i < clusterCount; i++) {
+            double[] values = new double[featureCount];
+            for (int j = 0; j < featureCount; j++) {
+                double position = (i + 1.0) / (clusterCount + 1.0);
+                double jitter = j % 2 == 0 ? 0.0 : (((i % 2) + 1) / 3.0 - 0.5) * 0.6;
+                values[j] = mins[j] + ranges[j] * clamp(position + jitter, 0.05, 0.95);
+            }
+            centroids.add(values);
+        }
+
         List<MlSimulationEngine.MetricPoint> history = new ArrayList<>();
         List<Integer> assignments = new ArrayList<>();
         int totalSteps = Math.max(1, steps);
 
         for (int step = 1; step <= totalSteps; step++) {
-            assignments = assign(points, centroids);
-            centroids = recompute(points, assignments, centroids, featureCount);
-            double inertia = inertia(points, centroids, assignments);
-            double silhouette = silhouette(points, assignments, clusterCount);
-            history.add(metricPoint(step, round(inertia), round(silhouette)));
+            assignments = assignNormalized(points, centroids, normalizer);
+            centroids = recomputeWithMomentum(points, assignments, centroids, featureCount, 0.35);
+            double inertia = 0.0;
+            List<Integer> finalAssignments = assignNormalized(points, centroids, normalizer);
+            for (int i = 0; i < points.size(); i++) {
+                inertia += normalizedSquaredDistance(points.get(i).features(),
+                        centroids.get(finalAssignments.get(i)), normalizer);
+            }
+            double normalizedInertia = inertia / Math.max(EPS, points.size() * Math.max(1, featureCount) * 4.0);
+            double silhouette = approximateSilhouette(points, finalAssignments, centroids, normalizer);
+            assignments = finalAssignments;
+            history.add(metricPoint(step, round(normalizedInertia), round(silhouette)));
         }
 
         List<List<Double>> centroidDtos = new ArrayList<>();
         for (double[] centroid : centroids) {
-            List<Double> row = new ArrayList<>();
+            List<Double> row = new ArrayList<>(centroid.length);
             for (double value : centroid) {
                 row.add(round(value));
             }
@@ -268,45 +305,24 @@ public final class MlAdvancedEngine {
         return new ClusterResult(centroidDtos, assignments, history);
     }
 
-    private static List<double[]> initCentroids(List<MlSimulationEngine.Point> points, int k, Random random) {
-        List<double[]> centroids = new ArrayList<>();
-        centroids.add(points.get(random.nextInt(points.size())).features().clone());
-        while (centroids.size() < k) {
-            double[] distances = new double[points.size()];
-            double total = 0.0;
-            for (int i = 0; i < points.size(); i++) {
-                double best = Double.MAX_VALUE;
-                for (double[] centroid : centroids) {
-                    best = Math.min(best, squaredDistance(points.get(i).features(), centroid));
-                }
-                distances[i] = best;
-                total += best;
-            }
-            if (total < EPS) {
-                break;
-            }
-            double target = random.nextDouble() * total;
-            double acc = 0.0;
-            int chosen = 0;
-            for (int i = 0; i < points.size(); i++) {
-                acc += distances[i];
-                if (acc >= target) {
-                    chosen = i;
-                    break;
-                }
-            }
-            centroids.add(points.get(chosen).features().clone());
+    /** 归一化空间里的平方距离（原项目 normalizedSquaredDistance） */
+    private static double normalizedSquaredDistance(double[] features, double[] centroid, Normalizer normalizer) {
+        double total = 0.0;
+        for (int j = 0; j < Math.min(centroid.length, features.length); j++) {
+            double diff = normalizer.normalize(features)[j] - normalizer.normalize(centroid)[j];
+            total += diff * diff;
         }
-        return centroids;
+        return total;
     }
 
-    private static List<Integer> assign(List<MlSimulationEngine.Point> points, List<double[]> centroids) {
+    private static List<Integer> assignNormalized(List<MlSimulationEngine.Point> points,
+                                                  List<double[]> centroids, Normalizer normalizer) {
         List<Integer> assignments = new ArrayList<>(points.size());
         for (MlSimulationEngine.Point p : points) {
             int best = 0;
             double bestDistance = Double.MAX_VALUE;
             for (int c = 0; c < centroids.size(); c++) {
-                double distance = squaredDistance(p.features(), centroids.get(c));
+                double distance = normalizedSquaredDistance(p.features(), centroids.get(c), normalizer);
                 if (distance < bestDistance) {
                     bestDistance = distance;
                     best = c;
@@ -317,78 +333,63 @@ public final class MlAdvancedEngine {
         return assignments;
     }
 
-    private static List<double[]> recompute(List<MlSimulationEngine.Point> points, List<Integer> assignments,
-                                            List<double[]> centroids, int featureCount) {
-        List<double[]> sums = new ArrayList<>();
-        int[] counts = new int[centroids.size()];
-        for (int c = 0; c < centroids.size(); c++) {
-            sums.add(new double[featureCount]);
-        }
-        for (int i = 0; i < points.size(); i++) {
-            int cluster = assignments.get(i);
-            counts[cluster]++;
+    /** 质心向簇均值移动，但只走 0.35（原项目 recomputeCentroids 的动量） */
+    private static List<double[]> recomputeWithMomentum(List<MlSimulationEngine.Point> points,
+                                                        List<Integer> assignments,
+                                                        List<double[]> previous,
+                                                        int featureCount,
+                                                        double momentum) {
+        List<double[]> updated = new ArrayList<>(previous.size());
+        for (int clusterId = 0; clusterId < previous.size(); clusterId++) {
+            double[] sums = new double[featureCount];
+            int count = 0;
+            for (int i = 0; i < points.size(); i++) {
+                if (assignments.get(i) != clusterId) {
+                    continue;
+                }
+                for (int j = 0; j < featureCount; j++) {
+                    sums[j] += points.get(i).features()[j];
+                }
+                count++;
+            }
+            double[] values = new double[featureCount];
             for (int j = 0; j < featureCount; j++) {
-                sums.get(cluster)[j] += points.get(i).features()[j];
+                double mean = count == 0 ? previous.get(clusterId)[j] : sums[j] / count;
+                values[j] = previous.get(clusterId)[j] + (mean - previous.get(clusterId)[j]) * momentum;
             }
-        }
-        List<double[]> updated = new ArrayList<>(centroids.size());
-        for (int c = 0; c < centroids.size(); c++) {
-            if (counts[c] == 0) {
-                updated.add(centroids.get(c));
-                continue;
-            }
-            double[] centroid = new double[featureCount];
-            for (int j = 0; j < featureCount; j++) {
-                centroid[j] = sums.get(c)[j] / counts[c];
-            }
-            updated.add(centroid);
+            updated.add(values);
         }
         return updated;
     }
 
-    private static double inertia(List<MlSimulationEngine.Point> points, List<double[]> centroids,
-                                  List<Integer> assignments) {
-        double sum = 0.0;
-        for (int i = 0; i < points.size(); i++) {
-            sum += squaredDistance(points.get(i).features(), centroids.get(assignments.get(i)));
-        }
-        return sum;
-    }
-
-    /** 轮廓系数（O(n²)，样本量百级时足够）。 */
-    private static double silhouette(List<MlSimulationEngine.Point> points, List<Integer> assignments, int k) {
-        if (k < 2 || points.size() > 400) {
+    /** 原项目的轮廓系数近似：(平均 (b-a)/max(a,b) + 1) / 2，截到 0.99 */
+    private static double approximateSilhouette(List<MlSimulationEngine.Point> points,
+                                                List<Integer> assignments, List<double[]> centroids,
+                                                Normalizer normalizer) {
+        if (centroids.size() <= 1 || points.isEmpty()) {
             return 0.0;
         }
         double total = 0.0;
         for (int i = 0; i < points.size(); i++) {
-            double[] aSums = new double[k];
-            int[] aCounts = new int[k];
-            for (int j = 0; j < points.size(); j++) {
-                if (i == j) {
-                    continue;
-                }
-                int cluster = assignments.get(j);
-                aSums[cluster] += Math.sqrt(squaredDistance(points.get(i).features(), points.get(j).features()));
-                aCounts[cluster]++;
-            }
             int own = assignments.get(i);
-            double a = aCounts[own] == 0 ? 0.0 : aSums[own] / aCounts[own];
+            double a = Math.sqrt(normalizedSquaredDistance(points.get(i).features(), centroids.get(own), normalizer));
             double b = Double.MAX_VALUE;
-            for (int c = 0; c < k; c++) {
-                if (c == own || aCounts[c] == 0) {
+            for (int c = 0; c < centroids.size(); c++) {
+                if (c == own) {
                     continue;
                 }
-                b = Math.min(b, aSums[c] / aCounts[c]);
+                b = Math.min(b, Math.sqrt(normalizedSquaredDistance(points.get(i).features(), centroids.get(c), normalizer)));
             }
-            if (b == Double.MAX_VALUE) {
-                continue;
-            }
-            double denominator = Math.max(a, b);
-            total += denominator < EPS ? 0.0 : (b - a) / denominator;
+            total += (b - a) / Math.max(a, b);
         }
-        return total / points.size();
+        return clamp((total / points.size() + 1.0) / 2.0, 0.0, 0.99);
     }
+
+
+
+
+
+    /** 轮廓系数（O(n²)，样本量百级时足够）。 */
 
     // ==================== PCA ====================
 

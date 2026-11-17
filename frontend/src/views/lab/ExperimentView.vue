@@ -36,6 +36,8 @@
           :model="model"
           :lines="overlayLines"
           :projection-note="projectionNote"
+          :assignments="chartAssignments"
+          :centroids="chartCentroids"
           @axes-change="onAxesChange"
         />
 
@@ -185,6 +187,14 @@ const projectionNote = computed(() => {
 
 /** 画布上的线全部来自后端投影接口，前端不再自己算 */
 const overlayLines = computed(() => projection.value?.lines ?? [])
+
+/** 训练后的分配结果：分类为预测类别，聚类为簇号 */
+const chartAssignments = computed(() => session.value?.modelData?.assignments ?? [])
+
+/** 聚类中心必须用后端投影到当前两维的结果，不能直接取全维坐标的前两位 */
+const chartCentroids = computed(() =>
+  projection.value?.kind === 'centroids' ? projection.value.centroids ?? [] : []
+)
 
 function formatNumber(value) {
   if (value == null || Number.isNaN(Number(value))) return '—'

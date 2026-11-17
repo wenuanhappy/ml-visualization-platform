@@ -64,7 +64,7 @@
         </div>
       </div>
 
-      <div v-if="chartPoints.length" class="chart-card">
+      <div v-if="state.totalSteps" class="chart-card">
         <div class="chart-header">
           <div>
             <span class="chart-title">训练轨迹</span>
@@ -129,7 +129,7 @@ function renderChart() {
   if (state.value.pca) {
     return
   }
-  if (!chartHost.value || !chartPoints.value.length) {
+  if (!chartHost.value) {
     return
   }
   if (!chart) {
