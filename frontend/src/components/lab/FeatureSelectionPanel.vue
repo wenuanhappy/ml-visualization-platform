@@ -44,6 +44,7 @@ import { onMounted, ref } from 'vue'
 import { featureSelectionTrain, getDataset, getDatasets } from '@/api/ml'
 import { ALGORITHMS, algorithmById, defaultParameterValues, toBackendParameters } from '@/services/algorithms'
 
+const algorithms = ALGORITHMS
 const datasets = ref([])
 const datasetId = ref(null)
 const algorithmId = ref('linear_regression')
