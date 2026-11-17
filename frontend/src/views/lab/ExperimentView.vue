@@ -452,6 +452,9 @@ onBeforeUnmount(stopTimer)
   flex-direction: column;
   gap: 22px;
   padding: 24px clamp(18px, 4vw, 36px) 44px;
+  /* 容器查询：嵌进主平台的「交互模拟」区域后，可用宽度由理论面板决定，
+     而不是浏览器视口宽度，所以用 container query 而不是 media query */
+  container-type: inline-size;
 }
 
 .hero-strip {
@@ -530,9 +533,9 @@ onBeforeUnmount(stopTimer)
   gap: 20px;
 }
 
-@media (max-width: 1200px) {
+@container (max-width: 1360px) {
   .experiment-layout {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   .right-panel {
@@ -540,6 +543,17 @@ onBeforeUnmount(stopTimer)
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 18px;
+  }
+}
+
+@container (max-width: 880px) {
+  .experiment-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .left-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <section class="canvas-card">
+  <section ref="cardHost" class="canvas-card">
     <header class="canvas-header">
       <span class="title-text">可视化画布</span>
 
@@ -109,6 +109,7 @@ const COLOR_MAP = {
   '簇 3': '#34D399'
 }
 
+const cardHost = ref(null)
 const chartHost = ref(null)
 const pca3dHost = ref(null)
 const importanceHost = ref(null)
@@ -117,6 +118,7 @@ let chartElement = null
 let importanceChart = null
 let importanceElement = null
 let importanceObserver = null
+let cardObserver = null
 
 // PCA 3D 视图（对照原项目 renderPca3d / onPca3dPointer*）
 const pca3dMode = ref(false)
@@ -585,6 +587,20 @@ function resize() {
 
 onMounted(() => {
   window.addEventListener('resize', resize)
+
+  // 嵌入主平台后，左侧理论面板收起/展开只改变容器宽度，不会触发 window.resize，
+  // 必须用 ResizeObserver 监听卡片自身尺寸才能让画布跟着自适应
+  if (typeof ResizeObserver !== 'undefined' && cardHost.value) {
+    cardObserver = new ResizeObserver(() => {
+      chart?.resize()
+      importanceChart?.resize()
+      if (pca3dActive.value) {
+        renderPca3d()
+      }
+    })
+    cardObserver.observe(cardHost.value)
+  }
+
   resetAxes()
   nextTick(() => {
     renderChart()
@@ -594,6 +610,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
+  cardObserver?.disconnect()
+  cardObserver = null
   chart?.dispose()
   chart = null
 })
