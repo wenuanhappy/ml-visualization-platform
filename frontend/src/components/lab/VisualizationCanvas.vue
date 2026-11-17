@@ -115,6 +115,8 @@ const importanceHost = ref(null)
 let chart = null
 let chartElement = null
 let importanceChart = null
+let importanceElement = null
+let importanceObserver = null
 
 // PCA 3D 视图（对照原项目 renderPca3d / onPca3dPointer*）
 const pca3dMode = ref(false)
@@ -529,8 +531,19 @@ function renderImportance() {
   if (!importanceHost.value || !importances.value.length) {
     return
   }
+  // 容器被重建（切算法时 v-if 会先移除再插入）就重建实例，否则会画在已移除的节点上
+  if (importanceChart && importanceElement !== importanceHost.value) {
+    importanceChart.dispose()
+    importanceChart = null
+  }
   if (!importanceChart) {
     importanceChart = init(importanceHost.value)
+    importanceElement = importanceHost.value
+    if (typeof ResizeObserver !== 'undefined') {
+      importanceObserver?.disconnect()
+      importanceObserver = new ResizeObserver(() => importanceChart?.resize())
+      importanceObserver.observe(importanceHost.value)
+    }
   }
   const top = [...importances.value].slice(0, 6).reverse()
   importanceChart.setOption({
@@ -552,6 +565,9 @@ function renderImportance() {
       label: { show: true, position: 'right', fontSize: 9, color: '#64748b', formatter: '{c}' }
     }]
   }, true)
+
+  // 容器刚插入 DOM 时尺寸可能还是 0，等一下再量一次
+  setTimeout(() => importanceChart?.resize(), 40)
 }
 
 function resize() {
