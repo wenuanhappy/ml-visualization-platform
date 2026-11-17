@@ -397,8 +397,12 @@ public final class MlAdvancedEngine {
     /**
      * PCA：逐行对照原项目 TrainingSimulationService.computePca。
      *
-     * 与原写法保持一致：
-     * 1. 只做**中心化**，不做标准化（因此方差解释率基于原始量纲）；
+     * 与原写法的差异（本项目统一约定）：先按维度做 z-score 标准化再求协方差，
+     * 与线性回归 / 逻辑回归 / SVM / K-Means 的归一化口径保持一致；
+     * 否则量纲大的特征（如房产税率 300~700）会独占 PC1。
+     *
+     * 其余与原文一致：
+     * 1. 标准化后求协方差；
      * 2. 协方差矩阵按 n-1 归一，总方差取迹；
      * 3. 用幂迭代 + 逐次收缩（deflation）求前 k 个特征向量，初值确定、不引入随机；
      * 4. 每个特征向量做符号归一：绝对值最大的载荷取正，保证载荷矩阵稳定可读。
@@ -409,20 +413,11 @@ public final class MlAdvancedEngine {
         int k = Math.max(1, Math.min(components, featureCount));
         int n = points.size();
 
-        double[] mean = new double[featureCount];
-        for (int j = 0; j < featureCount; j++) {
-            double sum = 0.0;
-            for (MlSimulationEngine.Point p : points) {
-                sum += p.features()[j];
-            }
-            mean[j] = sum / Math.max(1, n);
-        }
-
+        // 与其它算法同一套归一化：按维度 z-score（均值 0、标准差 1）
+        Normalizer normalizer = fit(dataset);
         double[][] centered = new double[n][featureCount];
         for (int i = 0; i < n; i++) {
-            for (int j = 0; j < featureCount; j++) {
-                centered[i][j] = points.get(i).features()[j] - mean[j];
-            }
+            centered[i] = normalizer.normalize(points.get(i).features());
         }
 
         double[][] cov = new double[featureCount][featureCount];

@@ -410,8 +410,9 @@ function onPca3dPointerMove(event) {
   const dx = event.clientX - pca3dLast.x
   const dy = event.clientY - pca3dLast.y
   pca3dLast = { x: event.clientX, y: event.clientY }
-  pca3dYaw.value += dx * 0.01
-  pca3dPitch.value = Math.max(-1.2, Math.min(1.2, pca3dPitch.value + dy * 0.01))
+  // 拖拽方向按实际手感调整：向右拖画面向右转、向下拖画面向下俯
+  pca3dYaw.value -= dx * 0.01
+  pca3dPitch.value = Math.max(-1.2, Math.min(1.2, pca3dPitch.value - dy * 0.01))
   renderPca3d()
 }
 
