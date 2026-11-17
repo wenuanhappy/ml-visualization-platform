@@ -1,7 +1,7 @@
 /**
  * 课程内容。
  *
- * 由 源代码/frontend/src/app/learning/learning.component.ts 的 lessons 数组机械抽取，
+ * 由 迁移前 Angular 版本的 learning.component 的 lessons 数组机械抽取，
  * 字段与原文一致（id / title / category / duration / summary / paragraphs / sections /
  * keyPoints / exampleTitle / example / checkQuestion / checkAnswer / checkOptions /
  * checkAnswerIndex），未做任何改写。

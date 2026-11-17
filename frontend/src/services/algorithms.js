@@ -1,7 +1,7 @@
 /**
  * 算法与超参数定义。
  *
- * 逐条对照原项目 源代码/frontend/src/app/services/learning-guide-data.service.ts
+ * 逐条对照原项目 迁移前 Angular 版本的 learning-guide-data.service
  * 的 mockAlgorithms（当后端 /api/algorithms 不可用时的兜底定义），
  * 参数名、显示名、默认值、范围、步长、下拉选项都保持一致。
  *

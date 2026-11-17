@@ -1,9 +1,0 @@
-node_modules
-.angular
-frontend/dist
-frontend/dist-check
-backend/target
-.claude
-.omc/
-frontend/.omc/
-frontend/out-tsc/

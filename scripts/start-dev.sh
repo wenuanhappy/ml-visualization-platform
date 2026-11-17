@@ -100,7 +100,7 @@ if port_busy 8080; then
     echo "✓ 后端已在 8080 运行"
   else
     echo "✗ 8080 被别的程序占用（检测到不是本项目的后端）。" >&2
-    echo "  常见原因：旧项目的 Docker 容器还在跑 → docker stop ml-platform-backend" >&2
+    echo "  常见原因：另一个后端进程（如旧版本或别的项目）还占着端口" >&2
     echo "  查看占用：lsof -nP -iTCP:8080 -sTCP:LISTEN" >&2
     exit 1
   fi

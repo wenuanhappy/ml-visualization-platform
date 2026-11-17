@@ -1,7 +1,7 @@
 /**
  * 引导式实验案例。
  *
- * 逐条对照原项目 源代码/frontend/src/app/services/learning-guide-data.service.ts
+ * 逐条对照原项目 迁移前 Angular 版本的 learning-guide-data.service
  * 的 guidedCases 与 buildGuidanceState：案例标题、摘要、目标、验证文案、
  * 参数预设与阶段文案全部照抄。
  *

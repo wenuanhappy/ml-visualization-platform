@@ -1,7 +1,7 @@
 /**
  * 理论考核题库。
  *
- * 由 源代码/frontend/src/app/learning/learning-question-bank.ts 机械抽取：
+ * 由 迁移前 Angular 版本的 learning-question-bank 机械抽取：
  * 每个知识点 5 种问法，选项、答案下标与解析均与原文一致。
  */
 
