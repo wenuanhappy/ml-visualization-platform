@@ -385,6 +385,11 @@ function stopTimer() {
 
 async function startTraining() {
   try {
+    // 已经跑完还点「开始」：按原项目语义是重新训练一轮，
+    // 否则 PCA 这类一次性算法看起来像"点了没反应"
+    if (session.value && finished.value) {
+      await resetTraining()
+    }
     await ensureSession()
     if (finished.value) return
     running.value = true

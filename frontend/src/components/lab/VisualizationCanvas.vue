@@ -601,10 +601,18 @@ watch(() => props.algorithmType, () => {
 })
 
 watch(() => props.model, (next, previous) => {
-  if (next !== previous) {
-    // 每次新的训练结果（含改主成分数后重训）都回到二维，
-    // 否则新结果只有 1~2 个主成分时会停在 3D 且看不到「切回 2D」
-    pca3dMode.value = false
+  if (next === previous) {
+    return
+  }
+  // 每次新的训练结果（含改主成分数后重训）都回到二维，
+  // 否则新结果只有 1~2 个主成分时会停在 3D 且看不到「切回 2D」
+  pca3dMode.value = false
+
+  // PCA 每次训练出新结果都要回到 PC1/PC2 展示，
+  // 否则之前手动切过原始维度的话，画布会一直停在那些维度上，看不到主成分
+  if (props.algorithmType === 'dimension' && (next?.projections?.[0]?.length ?? 0) >= 2) {
+    axesTouched.value = false
+    nextTick(() => resetAxes())
   }
 })
 
