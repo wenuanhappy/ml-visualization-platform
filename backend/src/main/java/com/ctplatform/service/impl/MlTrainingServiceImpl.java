@@ -390,7 +390,6 @@ public class MlTrainingServiceImpl implements MlTrainingService {
             nodes.add(dto);
         }
         model.setTree(nodes);
-        model.setFeatureImportances(toImportances(tree.importances(), parsed.featureNames()));
         model.setRevealedSplits(revealed);
         // 一次分裂都没展开时不给预测结果，画布按数据集自带标签着色（原项目复位后也是这样）
         model.setAssignments(revealed <= 0

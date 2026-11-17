@@ -63,7 +63,7 @@ public final class MlSimulationEngine {
     }
 
     /** 决策树构建结果。 */
-    public record TreeResult(List<Node> nodes, int splitCount, double[] importances, List<MetricPoint> history) {
+    public record TreeResult(List<Node> nodes, int splitCount, List<MetricPoint> history) {
     }
 
     // ==================== 线性回归 ====================
@@ -198,7 +198,6 @@ public final class MlSimulationEngine {
         int depthLimit = Math.max(1, Math.min(maxDepth, MAX_TREE_DEPTH));
         int minSamples = Math.max(1, Math.min(minSamplesPerLeaf, MIN_SAMPLES_PER_LEAF * 10));
 
-        double[] importances = new double[dataset.featureCount()];
         List<NodeBuilder> builders = new ArrayList<>();
         List<List<Point>> rowsOf = new ArrayList<>();
         NodeBuilder root = new NodeBuilder(0, 0, points, classCount);
@@ -233,8 +232,6 @@ public final class MlSimulationEngine {
             node.featureIndex = split.featureIndex();
             node.threshold = split.threshold();
             node.splitOrder = splitOrder++;
-            // 重要性：本次分裂带来的不纯度下降 × 落到该节点的样本数
-            importances[split.featureIndex()] += split.gain() * node.rows.size();
 
             NodeBuilder left = new NodeBuilder(builders.size(), node.depth + 1, leftRows, classCount);
             builders.add(left);
@@ -261,7 +258,7 @@ public final class MlSimulationEngine {
         for (int step = 0; step <= totalSplits; step++) {
             history.add(metricOf(nodes, points, step));
         }
-        return new TreeResult(nodes, totalSplits, importances, history);
+        return new TreeResult(nodes, totalSplits, history);
     }
 
     /** 按已展开的分裂数，给每个样本算出当前预测类别。 */
