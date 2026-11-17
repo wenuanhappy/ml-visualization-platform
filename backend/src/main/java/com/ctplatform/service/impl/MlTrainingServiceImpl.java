@@ -117,9 +117,10 @@ public class MlTrainingServiceImpl implements MlTrainingService {
             session.setDatasetId(dataset.getId());
             session.setParameters(objectMapper.writeValueAsString(
                     request.getParameters() == null ? java.util.Map.of() : request.getParameters()));
-            session.setCurrentStep(0);
+            boolean oneShot = PCA.equals(algorithm);
+            session.setCurrentStep(oneShot ? totalSteps : 0);
             session.setTotalSteps(totalSteps);
-            session.setStatus("ready");
+            session.setStatus(oneShot ? "finished" : "ready");
             sessionMapper.insert(session);
             return ApiResponse.success("训练会话已创建", buildResponse(session, dataset, parsed));
         } catch (IllegalArgumentException e) {
@@ -309,6 +310,16 @@ public class MlTrainingServiceImpl implements MlTrainingService {
     private void fillPca(MlTrainingResponse response, MlTrainingResponse.ModelData model,
                          MlSimulationEngine.Dataset parsed, int currentStep) {
         response.setScoreLabel("ExplainedVar");
+        if (currentStep <= 0) {
+            // 还没开始 / 已复位：不返回主成分，画布按原始维度显示
+            model.setProjections(List.of());
+            model.setExplainedVariance(List.of());
+            model.setPcaComponents(List.of());
+            response.setMetrics(List.of());
+            response.setLoss(null);
+            response.setAccuracy(null);
+            return;
+        }
         MlAdvancedEngine.PcaResult pca = MlAdvancedEngine.computePca(parsed, Math.max(1, currentStep));
         double cumulative = 0.0;
         List<List<Double>> projections = new ArrayList<>();

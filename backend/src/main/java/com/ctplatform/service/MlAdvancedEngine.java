@@ -395,88 +395,156 @@ public final class MlAdvancedEngine {
     // ==================== PCA ====================
 
     /**
-     * 标准化后做协方差矩阵特征分解，返回前 k 个主成分与投影坐标。
+     * PCA：逐行对照原项目 TrainingSimulationService.computePca。
+     *
+     * 与原写法保持一致：
+     * 1. 只做**中心化**，不做标准化（因此方差解释率基于原始量纲）；
+     * 2. 协方差矩阵按 n-1 归一，总方差取迹；
+     * 3. 用幂迭代 + 逐次收缩（deflation）求前 k 个特征向量，初值确定、不引入随机；
+     * 4. 每个特征向量做符号归一：绝对值最大的载荷取正，保证载荷矩阵稳定可读。
      */
     public static PcaResult computePca(MlSimulationEngine.Dataset dataset, int components) {
         List<MlSimulationEngine.Point> points = dataset.points();
         int featureCount = dataset.featureCount();
         int k = Math.max(1, Math.min(components, featureCount));
-        Normalizer normalizer = fit(dataset);
+        int n = points.size();
 
-        double[][] z = new double[points.size()][featureCount];
-        for (int i = 0; i < points.size(); i++) {
-            z[i] = normalizer.normalize(points.get(i).features());
+        double[] mean = new double[featureCount];
+        for (int j = 0; j < featureCount; j++) {
+            double sum = 0.0;
+            for (MlSimulationEngine.Point p : points) {
+                sum += p.features()[j];
+            }
+            mean[j] = sum / Math.max(1, n);
         }
 
-        double[][] covariance = new double[featureCount][featureCount];
-        for (double[] row : z) {
-            for (int a = 0; a < featureCount; a++) {
-                for (int b = 0; b < featureCount; b++) {
-                    covariance[a][b] += row[a] * row[b];
+        double[][] centered = new double[n][featureCount];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < featureCount; j++) {
+                centered[i][j] = points.get(i).features()[j] - mean[j];
+            }
+        }
+
+        double[][] cov = new double[featureCount][featureCount];
+        for (int i = 0; i < featureCount; i++) {
+            for (int j = i; j < featureCount; j++) {
+                double sum = 0.0;
+                for (int r = 0; r < n; r++) {
+                    sum += centered[r][i] * centered[r][j];
                 }
+                double value = n > 1 ? sum / (n - 1) : 0.0;
+                cov[i][j] = value;
+                cov[j][i] = value;
             }
         }
-        for (int a = 0; a < featureCount; a++) {
-            for (int b = 0; b < featureCount; b++) {
-                covariance[a][b] /= Math.max(1, points.size() - 1);
-            }
+
+        double totalVariance = 0.0;
+        for (int i = 0; i < featureCount; i++) {
+            totalVariance += cov[i][i];
         }
 
         double[][] working = new double[featureCount][];
         for (int i = 0; i < featureCount; i++) {
-            working[i] = covariance[i].clone();
-        }
-        double[][] eigenvectors = jacobiEigen(working, featureCount);
-        // 特征值 = 投影后的方差，按定义直接算，避免依赖 Jacobi 的对角元
-        double[] eigenvalues = new double[featureCount];
-        for (int c = 0; c < featureCount; c++) {
-            double sum = 0.0;
-            for (double[] row : z) {
-                double projection = 0.0;
-                for (int j = 0; j < featureCount; j++) {
-                    projection += row[j] * eigenvectors[j][c];
-                }
-                sum += projection * projection;
-            }
-            eigenvalues[c] = sum / Math.max(1, points.size() - 1);
-        }
-
-        Integer[] order = new Integer[featureCount];
-        for (int i = 0; i < featureCount; i++) {
-            order[i] = i;
-        }
-        Arrays.sort(order, Comparator.comparingDouble((Integer index) -> -eigenvalues[index]));
-
-        double totalVariance = 0.0;
-        for (double value : eigenvalues) {
-            totalVariance += value;
+            working[i] = cov[i].clone();
         }
 
         List<List<Double>> componentDtos = new ArrayList<>();
         List<Double> explained = new ArrayList<>();
         List<Double> cumulative = new ArrayList<>();
+        double[] eigenvalues = new double[k];
+        double[][] vectors = new double[k][featureCount];
+
+        for (int comp = 0; comp < k; comp++) {
+            double[] v = new double[featureCount];
+            for (int i = 0; i < featureCount; i++) {
+                v[i] = 1.0 + 0.1 * (i + 1);   // 确定性初值
+            }
+            double initNorm = 0.0;
+            for (int i = 0; i < featureCount; i++) {
+                initNorm += v[i] * v[i];
+            }
+            initNorm = Math.sqrt(Math.max(1e-12, initNorm));
+            for (int i = 0; i < featureCount; i++) {
+                v[i] /= initNorm;
+            }
+
+            // 幂迭代
+            for (int it = 0; it < 200; it++) {
+                double[] next = new double[featureCount];
+                for (int i = 0; i < featureCount; i++) {
+                    double sum = 0.0;
+                    for (int j = 0; j < featureCount; j++) {
+                        sum += working[i][j] * v[j];
+                    }
+                    next[i] = sum;
+                }
+                double norm = 0.0;
+                for (int i = 0; i < featureCount; i++) {
+                    norm += next[i] * next[i];
+                }
+                norm = Math.sqrt(Math.max(1e-12, norm));
+                for (int i = 0; i < featureCount; i++) {
+                    v[i] = next[i] / norm;
+                }
+            }
+
+            // 符号归一：绝对值最大的载荷取正
+            int maxIndex = 0;
+            for (int i = 1; i < featureCount; i++) {
+                if (Math.abs(v[i]) > Math.abs(v[maxIndex])) {
+                    maxIndex = i;
+                }
+            }
+            if (v[maxIndex] < 0) {
+                for (int i = 0; i < featureCount; i++) {
+                    v[i] = -v[i];
+                }
+            }
+
+            // 特征值 = vᵀ C v
+            double[] cv = new double[featureCount];
+            for (int i = 0; i < featureCount; i++) {
+                double sum = 0.0;
+                for (int j = 0; j < featureCount; j++) {
+                    sum += working[i][j] * v[j];
+                }
+                cv[i] = sum;
+            }
+            double eigenvalue = 0.0;
+            for (int i = 0; i < featureCount; i++) {
+                eigenvalue += v[i] * cv[i];
+            }
+            eigenvalues[comp] = eigenvalue;
+            vectors[comp] = v;
+
+            // 收缩：C ← C - λ v vᵀ
+            for (int i = 0; i < featureCount; i++) {
+                for (int j = 0; j < featureCount; j++) {
+                    working[i][j] -= eigenvalue * v[i] * v[j];
+                }
+            }
+        }
+
         double accumulated = 0.0;
-        for (int c = 0; c < k; c++) {
-            int index = order[c];
-            List<Double> component = new ArrayList<>();
+        for (int comp = 0; comp < k; comp++) {
+            List<Double> component = new ArrayList<>(featureCount);
             for (int j = 0; j < featureCount; j++) {
-                component.add(round(eigenvectors[j][index]));
+                component.add(round(vectors[comp][j]));
             }
             componentDtos.add(component);
-            double ratio = totalVariance < EPS ? 0.0 : eigenvalues[index] / totalVariance;
+            double ratio = totalVariance < EPS ? 0.0 : eigenvalues[comp] / totalVariance;
             accumulated += ratio;
             explained.add(round(ratio));
             cumulative.add(round(Math.min(1.0, accumulated)));
         }
 
-        List<List<Double>> projections = new ArrayList<>();
-        for (double[] row : z) {
-            List<Double> projected = new ArrayList<>();
-            for (int c = 0; c < k; c++) {
-                int index = order[c];
+        List<List<Double>> projections = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            List<Double> projected = new ArrayList<>(k);
+            for (int comp = 0; comp < k; comp++) {
                 double value = 0.0;
                 for (int j = 0; j < featureCount; j++) {
-                    value += row[j] * eigenvectors[j][index];
+                    value += centered[i][j] * vectors[comp][j];
                 }
                 projected.add(round(value));
             }

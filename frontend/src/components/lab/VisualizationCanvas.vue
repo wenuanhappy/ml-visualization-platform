@@ -7,7 +7,7 @@
         {{ pca3dActive ? '切回 2D' : '切换 3D' }}
       </button>
 
-      <span v-if="dataset && axisOptions.length >= 2" class="axis-pickers">
+      <span v-if="dataset && axisOptions.length >= 2 && !pcaSingleAxis" class="axis-pickers">
         <label class="axis-picker">
           <span class="axis-label">X 轴</span>
           <select :value="selectedXName" @change="onAxisChange('x', $event.target.value)">
@@ -128,6 +128,9 @@ const pca3dToggleVisible = computed(() => pca3dAvailable.value || pca3dMode.valu
 
 const importances = computed(() => props.model?.featureImportances ?? [])
 
+/** 只有 1 个主成分：原项目会在 Y 方向做固定幅度错位并把 Y 轴隐藏 */
+const pcaSingleAxis = computed(() => props.algorithmType === 'dimension' && pcaAxisNames.value.length === 1)
+
 const hasTarget = computed(() => (props.dataset?.points ?? []).some(point => point.target != null))
 
 /** 训练产出的主成分维度名（PC1/PC2/PC3…），PCA 时可与其他算法一样在轴上选择 */
@@ -209,6 +212,10 @@ function featureValue(point, name) {
 
 const pointCoords = computed(() =>
   points.value.map((point, index) => {
+    if (pcaSingleAxis.value) {
+      const projection = props.model?.projections?.[index]
+      return { x: projection?.[0] ?? 0, y: ((index % 9) - 4) * 0.05 }
+    }
     const x = featureValue(point, selectedXName.value)
     const y = featureValue(point, selectedYName.value)
     return { x, y }
@@ -310,8 +317,10 @@ function renderChart() {
     chart = echarts.init(chartHost.value, undefined, { renderer: 'canvas' })
   }
 
-  const xAxisLabel = selectedXName.value || 'Feature X'
-  const yAxisLabel = selectedYName.value || 'Feature Y'
+  const xAxisLabel = pcaSingleAxis.value ? 'PC1' : (selectedXName.value || 'Feature X')
+  const yAxisLabel = pcaSingleAxis.value
+    ? '（无第二主成分）'
+    : (selectedYName.value || 'Feature Y')
 
   chart.setOption({
     animation: true,
@@ -348,9 +357,11 @@ function renderChart() {
       nameLocation: 'middle',
       nameGap: 44,
       nameTextStyle: { color: '#1e293b', fontWeight: 600, fontSize: 11 },
-      axisLine: { lineStyle: { color: '#94A3B8' } },
-      axisLabel: { color: '#334155', fontSize: 10, fontWeight: 500 },
-      splitLine: { lineStyle: { color: 'rgba(15,23,42,0.06)' } }
+      ...(pcaSingleAxis.value ? { min: -1, max: 1 } : {}),
+      axisLine: pcaSingleAxis.value ? { show: false } : { lineStyle: { color: '#94A3B8' } },
+      axisTick: pcaSingleAxis.value ? { show: false } : {},
+      axisLabel: pcaSingleAxis.value ? { show: false } : { color: '#334155', fontSize: 10, fontWeight: 500 },
+      splitLine: pcaSingleAxis.value ? { show: false } : { lineStyle: { color: 'rgba(15,23,42,0.06)' } }
     },
     series: [...buildScatterSeries(), ...buildOverlaySeries()]
   }, true)
@@ -570,6 +581,14 @@ watch(() => props.dataset, () => {
 
 // 训练产出主成分后自动把坐标轴切到 PC1/PC2，否则画布看起来没变化
 watch(pcaAxisNames, names => {
+  // 主成分消失（复位/换算法）时，如果当前轴还停在 PC*，需要退回原始维度，
+  // 否则轴名对不上，点会被算成 0，看起来像一条直线
+  const stalePcAxis = name => typeof name === 'string' && name.startsWith('PC')
+  if (!names.length && (stalePcAxis(selectedXName.value) || stalePcAxis(selectedYName.value))) {
+    axesTouched.value = false
+    nextTick(() => resetAxes())
+    return
+  }
   // 至少要有 2 个主成分才切到 PC1/PC2；只有 1 个时先在原始维度上看数据
   if (!axesTouched.value && names.length >= 2) {
     resetAxes()
