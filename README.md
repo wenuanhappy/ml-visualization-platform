@@ -65,3 +65,24 @@ npm start
 ## License
 
 MIT
+
+## AI 助教（可选）
+
+后端从环境变量读取，仓库里不保存任何 key：
+
+```bash
+export LLM_API_KEY=sk-...
+export LLM_ENDPOINT=https://api.openai.com/v1   # 可选
+export LLM_MODEL=gpt-3.5-turbo                  # 可选
+```
+
+未配置时，助教会直接回复「尚未配置」的提示，不影响其余功能。
+
+## 脚本
+
+```bash
+./scripts/start-dev.sh                  # 数据库 + 后端 8080 + 前端 5174
+./scripts/start-dev.sh --with-platform  # 再加主平台 5173
+./scripts/stop-dev.sh                   # 关闭
+./scripts/db.sh status                  # 项目自带 MySQL 实例（.dev/mysql, 3308）
+```
