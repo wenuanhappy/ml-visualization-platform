@@ -1,5 +1,10 @@
 # Machine Learning Algorithm Visualization Platform
 
+> **迁移说明（2025-11）**：本仓库已迁移到 Vue 3 + Spring Boot（`frontend/` 与 `backend/`），
+> 与 ct-platform-v2 同构，可直接同步进主平台。下文描述的 Angular 版本保留在 `源代码/` 目录，
+> 仅作参考，不再维护。启动方式见文末「脚本」一节。
+
+
 机器学习算法可视化教学平台 - 交互式教育平台，展示传统 ML 算法的训练过程。
 
 ## 功能特性
