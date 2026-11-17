@@ -7,7 +7,7 @@
         {{ pca3dActive ? '切回 2D' : '切换 3D' }}
       </button>
 
-      <span v-if="dataset && !isPcaView" class="axis-pickers">
+      <span v-if="dataset && axisOptions.length >= 2" class="axis-pickers">
         <label class="axis-picker">
           <span class="axis-label">X 轴</span>
           <select :value="selectedXName" @change="onAxisChange('x', $event.target.value)">
@@ -33,10 +33,6 @@
         <span>{{ projectionNote }}</span>
       </div>
 
-      <div v-if="isPcaView" class="axis-hint">
-        <span class="axis-hint-icon">i</span>
-        <span>已把数据投影到 {{ pcaDimensions }} 个主成分上，散点按原始类别着色。</span>
-      </div>
 
       <div class="chart-area">
         <div v-if="!pca3dActive" ref="chartHost" class="chart-frame"></div>
@@ -196,15 +192,6 @@ function featureValue(point, name) {
 
 const pointCoords = computed(() =>
   points.value.map((point, index) => {
-    if (isPcaView.value) {
-      const projection = props.model?.projections?.[index]
-      if (projection?.length) {
-        // 只有 1 个主成分时，Y 只做固定幅度错位，避免所有点重叠
-        const y = projection.length < 2 ? ((index % 9) - 4) * 0.05 : projection[1] ?? 0
-        return { x: projection[0], y }
-      }
-      return { x: point.features[0] ?? 0, y: point.features[1] ?? 0 }
-    }
     const x = featureValue(point, selectedXName.value)
     const y = featureValue(point, selectedYName.value)
     return { x, y }
@@ -306,8 +293,8 @@ function renderChart() {
     chart = echarts.init(chartHost.value, undefined, { renderer: 'canvas' })
   }
 
-  const xAxisLabel = isPcaView.value ? 'PC1' : (selectedXName.value || 'Feature X')
-  const yAxisLabel = isPcaView.value ? 'PC2' : (selectedYName.value || 'Feature Y')
+  const xAxisLabel = selectedXName.value || 'Feature X'
+  const yAxisLabel = selectedYName.value || 'Feature Y'
 
   chart.setOption({
     animation: true,
@@ -530,8 +517,10 @@ function resize() {
 onMounted(() => {
   window.addEventListener('resize', resize)
   resetAxes()
-  renderChart()
-  nextTick(() => renderImportance())
+  nextTick(() => {
+    renderChart()
+    renderImportance()
+  })
 })
 
 onBeforeUnmount(() => {
@@ -571,7 +560,10 @@ watch(
   () => props.dataset,
   () => {
     resetAxes()
-    renderChart()
+    nextTick(() => {
+      renderChart()
+      renderImportance()
+    })
   }
 )
 

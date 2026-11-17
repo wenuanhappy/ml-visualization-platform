@@ -42,7 +42,6 @@ public class MlDatasetSeeder implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         try {
             seedIris();
-            seedRegression();
             seedBoston();
             seedMakeClassification();
             seedMakeBlobs();
@@ -50,6 +49,7 @@ public class MlDatasetSeeder implements ApplicationRunner {
             removeLegacy("blobs_3c");
             removeLegacy("iris_2d");
             removeLegacy("iris_full");
+            removeLegacy("regression_synthetic");
         } catch (Exception e) {
             log.warn("机器学习数据集初始化失败（可能是尚未执行 schema.sql）：{}", e.getMessage());
         }
@@ -70,25 +70,6 @@ public class MlDatasetSeeder implements ApplicationRunner {
                 "decision_tree,random_forest,logistic_regression,support_vector_machine,pca,k_means",
                 List.of("花萼长度", "花萼宽度", "花瓣长度", "花瓣宽度"), "品种",
                 List.of("setosa", "versicolor", "virginica"), points);
-    }
-
-    /** 合成回归数据，y = 2.5x + 1 + 噪声，固定种子 42 */
-    private void seedRegression() throws Exception {
-        Random random = new Random(42L);
-        List<Map<String, Object>> points = new ArrayList<>();
-        for (int i = 0; i < 60; i++) {
-            double x = Math.round((0.5 + random.nextDouble() * 9.0) * 100.0) / 100.0;
-            double noise = random.nextGaussian() * 0.8;
-            double y = Math.round((2.5 * x + 1.0 + noise) * 100.0) / 100.0;
-            Map<String, Object> point = new LinkedHashMap<>();
-            point.put("features", List.of(x));
-            point.put("target", y);
-            points.add(point);
-        }
-        upsert("regression_synthetic", "学习时长与成绩（合成）",
-                "由 y = 2.5x + 1 + 噪声 生成的合成回归数据，固定随机种子 42，用于线性回归梯度下降演示。",
-                "linear_regression",
-                List.of("学习时长(h)"), "成绩", null, points);
     }
 
     /** 波士顿房价：13 个数值特征 + 房价中位数，与原项目同源同名 */

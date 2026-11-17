@@ -185,12 +185,7 @@ const explanation = computed(() => buildExplanation({
   parameters: parameterValues.value
 }))
 
-const projectionNote = computed(() => {
-  if (algorithmId.value === 'pca') {
-    return 'PCA 视图：散点坐标为主成分投影，颜色保留原始类别。'
-  }
-  return projection.value?.note ?? ''
-})
+const projectionNote = computed(() => projection.value?.note ?? '')
 
 /** 画布上的线全部来自后端投影接口，前端不再自己算 */
 const overlayLines = computed(() => projection.value?.lines ?? [])

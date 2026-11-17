@@ -46,7 +46,7 @@ const props = defineProps({
   context: { type: String, default: '' }
 })
 
-const minimized = ref(false)
+const minimized = ref(true)
 const question = ref('')
 const loading = ref(false)
 const messages = ref([])
