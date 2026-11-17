@@ -109,6 +109,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   font-size: 11px;
   color: #64748b;
   white-space: nowrap;
@@ -119,7 +121,9 @@ onMounted(async () => {
 }
 
 .field select {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   padding: 5px 8px;
   font-size: 11px;
   color: #0f172a;

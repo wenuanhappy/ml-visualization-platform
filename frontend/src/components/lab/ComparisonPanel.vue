@@ -217,6 +217,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   font-size: 11px;
   color: #64748b;
   white-space: nowrap;
@@ -231,6 +233,8 @@ onBeforeUnmount(() => {
 .alias-input,
 .param-row input,
 .param-row select {
+  min-width: 0;
+  max-width: 100%;
   padding: 5px 8px;
   font-size: 11px;
   color: #0f172a;
@@ -241,11 +245,18 @@ onBeforeUnmount(() => {
 
 .add-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .add-row select {
-  flex: 1;
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
+.add-row .btn {
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 
 .btn {
