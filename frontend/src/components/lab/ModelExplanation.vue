@@ -93,8 +93,8 @@ function weightWidth(value) {
 
 .panel-header h3 {
   margin: 0 0 12px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 800;
   color: #0f172a;
 }
 

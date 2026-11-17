@@ -69,8 +69,7 @@
 }
 
 .app-main {
-  max-width: 1400px;
+  max-width: 1680px;
   margin: 0 auto;
-  padding: 22px 28px 40px;
 }
 </style>
