@@ -114,6 +114,7 @@ const chartHost = ref(null)
 const pca3dHost = ref(null)
 const importanceHost = ref(null)
 let chart = null
+let chartElement = null
 let importanceChart = null
 
 // PCA 3D 视图（对照原项目 renderPca3d / onPca3dPointer*）
@@ -294,6 +295,7 @@ function buildOverlaySeries() {
 function disposeChart() {
   chart?.dispose()
   chart = null
+  chartElement = null
 }
 
 function renderChart() {
