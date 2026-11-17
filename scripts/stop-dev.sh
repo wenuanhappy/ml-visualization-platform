@@ -48,8 +48,8 @@ kill_pidfile platform
 
 # 兜底：PID 文件丢失或进程换了 PID 的情况
 pkill -f "ct-platform-backend-1.0.0.jar" 2>/dev/null && echo "  ✓ 已清理残留后端进程" || true
-pkill -f "ml-visualization-platform/frontend/node_modules/.bin/vite" 2>/dev/null && echo "  ✓ 已清理残留自有前端" || true
-pkill -f "ct-platform-v2/frontend/node_modules/.bin/vite" 2>/dev/null && echo "  ✓ 已清理残留主平台前端" || true
+pkill -f "vite --port 5174" 2>/dev/null && echo "  ✓ 已清理残留自有前端" || true
+pkill -f "vite --port 5173" 2>/dev/null && echo "  ✓ 已清理残留主平台前端" || true
 
 if [ "$WITH_MYSQL" -eq 1 ]; then
   bash "$ROOT/scripts/db.sh" stop
