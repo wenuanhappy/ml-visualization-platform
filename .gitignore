@@ -36,3 +36,6 @@ dist/
 
 # Local scratch: ct-platform-v2 reference clone + maven cache
 .scratch/
+
+# Local dev runtime: logs, pid files, db credentials
+.dev/
