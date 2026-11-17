@@ -3,8 +3,8 @@
     <header class="canvas-header">
       <span class="title-text">可视化画布</span>
 
-      <button v-if="pca3dAvailable" type="button" class="view-toggle" @click="togglePca3d">
-        {{ pca3dMode ? '切回 2D' : '切换 3D' }}
+      <button v-if="pca3dToggleVisible" type="button" class="view-toggle" @click="togglePca3d">
+        {{ pca3dActive ? '切回 2D' : '切换 3D' }}
       </button>
 
       <span v-if="dataset && !isPcaView" class="axis-pickers">
@@ -39,7 +39,7 @@
       </div>
 
       <div class="chart-area">
-        <div v-if="!pca3dMode" ref="chartHost" class="chart-frame"></div>
+        <div v-if="!pca3dActive" ref="chartHost" class="chart-frame"></div>
 
         <div v-else class="pca3d-frame">
           <canvas
@@ -124,6 +124,10 @@ let pca3dDragging = false
 let pca3dLast = { x: 0, y: 0 }
 
 const pca3dAvailable = computed(() => (props.model?.projections?.[0]?.length ?? 0) >= 3)
+/** 真正渲染 3D：状态位残留但数据不足 3 维时一律退回 2D（原项目 pca3dActive） */
+const pca3dActive = computed(() => pca3dMode.value && pca3dAvailable.value)
+/** 按钮可见：可切 3D，或正处于 3D 需要「切回 2D」 */
+const pca3dToggleVisible = computed(() => pca3dAvailable.value || pca3dMode.value)
 
 const importances = computed(() => props.model?.featureImportances ?? [])
 
@@ -343,8 +347,12 @@ function renderChart() {
 }
 
 function togglePca3d() {
+  // 没有 3 维数据时只允许「切回 2D」，不允许进入空白的三维画布
+  if (!pca3dAvailable.value && !pca3dMode.value) {
+    return
+  }
   pca3dMode.value = !pca3dMode.value
-  if (pca3dMode.value) {
+  if (pca3dActive.value) {
     nextTick(() => renderPca3d())
   } else {
     nextTick(() => renderChart())
@@ -493,7 +501,7 @@ function renderImportance() {
 function resize() {
   chart?.resize()
   importanceChart?.resize()
-  if (pca3dMode.value) renderPca3d()
+  if (pca3dActive.value) renderPca3d()
 }
 
 onMounted(() => {
@@ -519,6 +527,23 @@ function resetAxes() {
   emit('axes-change', { x: selectedXName.value, y: selectedYName.value })
 }
 
+// 对照原项目 ngOnChanges：换数据集 / 换算法 / 拿到新的训练结果都退回二维视图
+watch(() => props.dataset, () => {
+  pca3dMode.value = false
+})
+
+watch(() => props.algorithmType, () => {
+  pca3dMode.value = false
+})
+
+watch(() => props.model, (next, previous) => {
+  if (next !== previous) {
+    // 每次新的训练结果（含改主成分数后重训）都回到二维，
+    // 否则新结果只有 1~2 个主成分时会停在 3D 且看不到「切回 2D」
+    pca3dMode.value = false
+  }
+})
+
 watch(
   () => props.dataset,
   () => {
@@ -528,7 +553,7 @@ watch(
 )
 
 watch(
-  () => [props.model, props.lines, props.assignments, importances.value, selectedXName.value, selectedYName.value, pca3dMode.value],
+  () => [props.model, props.lines, props.assignments, importances.value, selectedXName.value, selectedYName.value, pca3dActive.value],
   renderChart,
   { deep: true }
 )
