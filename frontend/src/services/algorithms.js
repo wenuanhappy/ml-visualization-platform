@@ -66,7 +66,7 @@ export const ALGORITHMS = [
     description: '基于边界的分类器，可调节正则化参数。',
     type: 'classification',
     parameters: [
-      { name: 'kernel', displayName: '核函数', type: 'select', default: 'rbf', options: ['linear', 'rbf'] },
+      { name: 'kernel', displayName: '核函数', type: 'select', default: 'rbf', options: ['linear', 'rbf', 'poly'] },
       numberParam('c', '正则化参数C', 1, 0.1, 4, 0.1),
       numberParam('iterations', '迭代次数', 80, 20, 200, 10, 'steps')
     ]

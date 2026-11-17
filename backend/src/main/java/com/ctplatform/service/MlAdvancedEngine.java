@@ -179,6 +179,226 @@ public final class MlAdvancedEngine {
                 boundary, predictions, history);
     }
 
+    // ==================== 非线性核 SVM（poly / rbf） ====================
+
+    /**
+     * 核方法 SVM：用核技巧在原始两维特征上做合页损失 SGD，再把决策边界采样成折线。
+     * 原项目 poly/rbf 用的是固定的两维近似权重；这里用等价的标准核方法实现，
+     * 保证界面上 poly / rbf 两个核函数都能得到真正的非线性边界。
+     */
+    public static ClassificationResult trainKernelSvm(MlSimulationEngine.Dataset dataset, String kernel,
+                                                      double gamma, int steps) {
+        List<MlSimulationEngine.Point> points = dataset.points();
+        int featureCount = Math.min(2, dataset.featureCount());
+        int n = points.size();
+        Normalizer normalizer = fit(dataset);
+
+        double[][] z = new double[n][featureCount];
+        double[] y = new double[n];
+        for (int i = 0; i < n; i++) {
+            double[] normalized = normalizer.normalize(points.get(i).features());
+            for (int j = 0; j < featureCount; j++) {
+                z[i][j] = normalized[j];
+            }
+            y[i] = label(points.get(i)) == 1 ? 1.0 : -1.0;
+        }
+        double g = Math.max(0.001, gamma);
+
+        double[] alpha = new double[n];
+        double bias = 0.0;
+        double learningRate = 0.6;
+        int totalSteps = Math.max(1, steps);
+        List<MlSimulationEngine.MetricPoint> history = new ArrayList<>();
+
+        for (int step = 1; step <= totalSteps; step++) {
+            for (int i = 0; i < n; i++) {
+                double score = bias;
+                for (int j = 0; j < n; j++) {
+                    if (alpha[j] == 0.0) {
+                        continue;
+                    }
+                    score += alpha[j] * y[j] * kernelValue(kernel, g, z[i], z[j]);
+                }
+                if (y[i] * score < 1.0) {
+                    alpha[i] += learningRate;
+                    bias += learningRate * y[i];
+                }
+            }
+            int correct = 0;
+            for (int i = 0; i < n; i++) {
+                double score = bias;
+                for (int j = 0; j < n; j++) {
+                    if (alpha[j] == 0.0) {
+                        continue;
+                    }
+                    score += alpha[j] * y[j] * kernelValue(kernel, g, z[i], z[j]);
+                }
+                if ((score >= 0 ? 1 : 0) == label(points.get(i))) {
+                    correct++;
+                }
+            }
+            double accuracy = n == 0 ? 0.0 : (double) correct / n;
+            history.add(metricPoint(step, round(1.0 - accuracy), round(accuracy)));
+        }
+
+        List<Integer> predictions = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            double score = bias;
+            for (int j = 0; j < n; j++) {
+                if (alpha[j] == 0.0) {
+                    continue;
+                }
+                score += alpha[j] * y[j] * kernelValue(kernel, g, z[i], z[j]);
+            }
+            predictions.add(score >= 0 ? 1 : 0);
+        }
+
+        // 采样出边界折线：把碎段按端点相连拼成折线，取最长的一条
+        List<List<Double>> boundary = sampleKernelBoundary(points, normalizer, featureCount,
+                kernel, g, alpha, y, z, bias);
+
+        return new ClassificationResult(new double[]{0.0}, 0.0, normalizer.means().clone(),
+                boundary, predictions, history);
+    }
+
+    private static double kernelValue(String kernel, double gamma, double[] a, double[] b) {
+        if ("rbf".equals(kernel)) {
+            double sum = 0.0;
+            for (int j = 0; j < a.length; j++) {
+                double diff = a[j] - b[j];
+                sum += diff * diff;
+            }
+            return Math.exp(-gamma * sum);
+        }
+        // poly：degree = 2、coef0 = 1
+        double dot = 0.0;
+        for (int j = 0; j < a.length; j++) {
+            dot += a[j] * b[j];
+        }
+        return Math.pow(gamma * dot + 1.0, 2);
+    }
+
+    /** 网格 + marching squares，把核 SVM 的 0 等值线采样成分段折线 */
+    private static List<List<Double>> sampleKernelBoundary(List<MlSimulationEngine.Point> points,
+                                                           Normalizer normalizer, int featureCount,
+                                                           String kernel, double gamma,
+                                                           double[] alpha, double[] y, double[][] z,
+                                                           double bias) {
+        List<List<Double>> segments = new ArrayList<>();
+        if (points.isEmpty() || featureCount < 2) {
+            return segments;
+        }
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (MlSimulationEngine.Point p : points) {
+            minX = Math.min(minX, p.features()[0]);
+            maxX = Math.max(maxX, p.features()[0]);
+            minY = Math.min(minY, p.features()[1]);
+            maxY = Math.max(maxY, p.features()[1]);
+        }
+        double padX = (maxX - minX) * 0.05 + 1e-6;
+        double padY = (maxY - minY) * 0.05 + 1e-6;
+        minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+
+        int grid = 48;
+        double[][] values = new double[grid + 1][grid + 1];
+        for (int i = 0; i <= grid; i++) {
+            for (int j = 0; j <= grid; j++) {
+                double rawX = minX + (maxX - minX) * i / grid;
+                double rawY = minY + (maxY - minY) * j / grid;
+                double[] probe = new double[featureCount];
+                probe[0] = (rawX - normalizer.means()[0]) / Math.max(EPS, normalizer.scales()[0]);
+                probe[1] = (rawY - normalizer.means()[1]) / Math.max(EPS, normalizer.scales()[1]);
+                double score = bias;
+                for (int k = 0; k < alpha.length; k++) {
+                    if (alpha[k] == 0.0) {
+                        continue;
+                    }
+                    score += alpha[k] * y[k] * kernelValue(kernel, gamma, probe, z[k]);
+                }
+                values[i][j] = score;
+            }
+        }
+
+        List<List<double[]>> rawSegments = new ArrayList<>();
+        // 每个单元里找符号变化的边，插值出交点，连成一条短线段
+        for (int i = 0; i < grid; i++) {
+            for (int j = 0; j < grid; j++) {
+                double v00 = values[i][j];
+                double v10 = values[i + 1][j];
+                double v01 = values[i][j + 1];
+                double v11 = values[i + 1][j + 1];
+                List<double[]> crossings = new ArrayList<>(4);
+                addCrossing(crossings, v00, v10, i, j, i + 1, j, minX, maxX, minY, maxY, grid);
+                addCrossing(crossings, v10, v11, i + 1, j, i + 1, j + 1, minX, maxX, minY, maxY, grid);
+                addCrossing(crossings, v11, v01, i + 1, j + 1, i, j + 1, minX, maxX, minY, maxY, grid);
+                addCrossing(crossings, v01, v00, i, j + 1, i, j, minX, maxX, minY, maxY, grid);
+                for (int a = 0; a + 1 < crossings.size(); a += 2) {
+                    rawSegments.add(List.of(crossings.get(a), crossings.get(a + 1)));
+                }
+            }
+        }
+        return chainLongest(rawSegments, (maxX - minX) / grid);
+    }
+
+    /** 把碎线段按端点距离贪心串成折线，返回最长的一条（画布每条 series 只画一条线） */
+    private static List<List<Double>> chainLongest(List<List<double[]>> segments, double step) {
+        double tolerance = Math.max(step * 1.5, 1e-9);
+        List<List<double[]>> remaining = new ArrayList<>(segments);
+        List<List<double[]>> chains = new ArrayList<>();
+        while (!remaining.isEmpty()) {
+            List<double[]> chain = new ArrayList<>(remaining.remove(0));
+            boolean extended = true;
+            while (extended) {
+                extended = false;
+                for (int i = 0; i < remaining.size(); i++) {
+                    List<double[]> seg = remaining.get(i);
+                    double[] head = chain.get(0);
+                    double[] tail = chain.get(chain.size() - 1);
+                    if (dist(head, seg.get(1)) <= tolerance) {
+                        chain.add(0, seg.get(0));
+                    } else if (dist(tail, seg.get(0)) <= tolerance) {
+                        chain.add(seg.get(1));
+                    } else if (dist(tail, seg.get(1)) <= tolerance) {
+                        chain.add(seg.get(0));
+                    } else if (dist(head, seg.get(0)) <= tolerance) {
+                        chain.add(0, seg.get(1));
+                    } else {
+                        continue;
+                    }
+                    remaining.remove(i);
+                    extended = true;
+                    break;
+                }
+            }
+            chains.add(chain);
+        }
+        List<double[]> best = chains.stream().max((a, b) -> Integer.compare(a.size(), b.size())).orElse(List.of());
+        List<List<Double>> line = new ArrayList<>(best.size());
+        for (double[] point : best) {
+            line.add(List.of(round(point[0]), round(point[1])));
+        }
+        return line;
+    }
+
+    private static double dist(double[] a, double[] b) {
+        double dx = a[0] - b[0];
+        double dy = a[1] - b[1];
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private static void addCrossing(List<double[]> out, double va, double vb,
+                                    int ia, int ja, int ib, int jb,
+                                    double minX, double maxX, double minY, double maxY, int grid) {
+        if ((va > 0) == (vb > 0)) {
+            return;
+        }
+        double t = Math.abs(va - vb) < 1e-12 ? 0.5 : va / (va - vb);
+        double x = minX + (maxX - minX) * (ia + (ib - ia) * t) / grid;
+        double y = minY + (maxY - minY) * (ja + (jb - ja) * t) / grid;
+        out.add(new double[]{x, y});
+    }
+
     private static MlSimulationEngine.MetricPoint metric(List<MlSimulationEngine.Point> points, Normalizer normalizer,
                                       double[] weights, double bias, int step, boolean svm) {
         double loss = 0.0;
