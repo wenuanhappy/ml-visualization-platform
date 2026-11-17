@@ -93,6 +93,9 @@ const props = defineProps({
   projectionNote: { type: String, default: '' }
 })
 
+/** 类别配色（与原项目一致的一组分色，按类别下标取色） */
+const PALETTE = ['#38BDF8', '#F472B6', '#34D399', '#FB923C', '#A78BFA']
+
 const COLOR_MAP = {
   setosa: '#38BDF8',
   versicolor: '#FB923C',
@@ -179,11 +182,26 @@ function resolvePointLabel(point, index) {
 }
 
 function legendColor(label) {
-  if (COLOR_MAP[label]) {
-    return COLOR_MAP[label]
+  const text = String(label ?? '')
+  if (COLOR_MAP[text]) {
+    return COLOR_MAP[text]
   }
-  const base = label.replace(/^预测\s*/, '')
-  return COLOR_MAP[base] || '#378ADD'
+  // 「簇 1/2/3」按序号取色
+  const cluster = text.match(/^簇\s*(\d+)$/)
+  if (cluster) {
+    return PALETTE[(Number(cluster[1]) - 1) % PALETTE.length]
+  }
+  const name = text.replace(/^预测\s*/, '')
+  if (COLOR_MAP[name]) {
+    return COLOR_MAP[name]
+  }
+  // 数据集的类别名（如「类别 0 / 类别 1」）按 classNames 下标取色，
+  // 否则不同类别会一起落到兜底色上，看起来是同一个颜色
+  const index = (props.dataset?.classNames ?? []).indexOf(name)
+  if (index >= 0) {
+    return PALETTE[index % PALETTE.length]
+  }
+  return '#378ADD'
 }
 
 function onAxisChange(axis, value) {
