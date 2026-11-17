@@ -219,6 +219,11 @@ onBeforeUnmount(() => {
   gap: 8px;
   font-size: 11px;
   color: #64748b;
+  white-space: nowrap;
+}
+
+.field > span {
+  flex: none;
 }
 
 .field select,

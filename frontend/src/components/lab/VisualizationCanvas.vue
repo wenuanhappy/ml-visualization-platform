@@ -174,6 +174,10 @@ const uniqueLabels = computed(() => {
 function resolvePointLabel(point, index) {
   const assigned = props.assignments?.[index]
   if (assigned != null) {
+    // 聚类算法的编号是「簇」，不能套用数据集自带的类别名（否则图例会显示成花名）
+    if (props.algorithmType === 'clustering') {
+      return `簇 ${assigned + 1}`
+    }
     const named = props.dataset?.classNames?.[assigned]
     return named ?? `簇 ${assigned + 1}`
   }
@@ -610,12 +614,6 @@ function resetAxes() {
   emit('axes-change', { x: selectedXName.value, y: selectedYName.value })
 }
 
-// 对照原项目 ngOnChanges：换数据集 / 换算法 / 拿到新的训练结果都退回二维视图
-watch(() => props.dataset, () => {
-  pca3dMode.value = false
-  axesTouched.value = false
-})
-
 // 训练产出主成分后自动把坐标轴切到 PC1/PC2，否则画布看起来没变化
 watch(pcaAxisNames, names => {
   // 主成分消失（复位/换算法）时，如果当前轴还停在 PC*，需要退回原始维度，
@@ -644,6 +642,28 @@ watch(() => props.model, (next, previous) => {
   // 否则新结果只有 1~2 个主成分时会停在 3D 且看不到「切回 2D」
   pca3dMode.value = false
 
+  // 决策树：如果用户没手动选过轴，自动切到树实际用到的两个特征，
+  // 否则默认的前两维上可能一条分裂线都看不到
+  const tree = next?.tree
+  if (props.algorithmType === 'classification' && tree?.length && !axesTouched.value) {
+    const revealed = next?.revealedSplits ?? 0
+    const used = [...new Set(
+      tree
+        .filter(node => node.splitOrder >= 0 && node.splitOrder < revealed)
+        .sort((a, b) => a.splitOrder - b.splitOrder)
+        .map(node => node.featureIndex)
+    )].filter(index => index != null)
+    if (used.length) {
+      axesTouched.value = false
+      nextTick(() => {
+        const names = props.dataset?.featureNames ?? []
+        if (names[used[0]]) selectedXName.value = names[used[0]]
+        if (used.length > 1 && names[used[1]]) selectedYName.value = names[used[1]]
+        emit('axes-change', { x: selectedXName.value, y: selectedYName.value })
+      })
+    }
+  }
+
   // PCA 每次训练出新结果都要回到 PC1/PC2 展示，
   // 否则之前手动切过原始维度的话，画布会一直停在那些维度上，看不到主成分
   if (props.algorithmType === 'dimension' && (next?.projections?.[0]?.length ?? 0) >= 2) {
@@ -652,9 +672,11 @@ watch(() => props.model, (next, previous) => {
   }
 })
 
+// 换数据集：退回二维、重选坐标轴、重画
 watch(
   () => props.dataset,
   () => {
+    pca3dMode.value = false
     axesTouched.value = false
     resetAxes()
     nextTick(() => {
@@ -665,8 +687,16 @@ watch(
 )
 
 watch(
-  () => [props.model, props.lines, props.assignments, importances.value, selectedXName.value, selectedYName.value, pca3dActive.value],
-  renderChart,
+  () => [props.model, props.lines, props.assignments, importances.value,
+    selectedXName.value, selectedYName.value, pca3dActive.value],
+  () => nextTick(() => {
+    if (pca3dActive.value) {
+      renderPca3d()
+    } else {
+      renderChart()
+      renderImportance()
+    }
+  }),
   { deep: true }
 )
 </script>
