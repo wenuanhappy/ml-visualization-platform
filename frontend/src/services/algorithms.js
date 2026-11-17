@@ -9,8 +9,33 @@
  * 原项目用 iterations / maxIterations，本项目后端用 steps 表示迭代次数。
  */
 
+const TIPS = {
+  learningRate: '每一步沿梯度方向移动的幅度。太大容易震荡，太小收敛很慢。',
+  iterations: '一共执行多少步梯度下降。步数越多拟合越充分，但耗时更长。',
+  maxDepth: '树的最大深度。越深越容易过拟合，越浅越容易欠拟合。',
+  minSamplesSplit: '一个节点至少有多少样本才允许继续分裂，值越大树越保守。',
+  criterion: '分裂时的不纯度度量：gini 为基尼不纯度，entropy 为信息熵。',
+  k: '要把样本聚成几类。K 过大可能把真实的一簇拆开。',
+  maxIterations: 'K-Means 最多迭代多少轮，轮数足够时质心会稳定下来。',
+  kernel: 'linear 用直线分界；rbf 用高斯核；poly 用二次多项式核，边界更弯曲。',
+  c: '正则化参数。越大越不允许违反间隔，边界更紧贴样本，容易过拟合。',
+  gamma: '核宽度。越大每个样本影响范围越小，边界越弯曲。',
+  trees: '森林里树的数量。树越多越稳定，但训练更慢。',
+  n_components: '保留几个主成分。通常取 2 个就能画出二维投影。'
+}
+
 function numberParam(name, displayName, def, min, max, step, backendKey) {
-  return { name, displayName, type: 'number', default: def, min, max, step, backendKey: backendKey || name }
+  return {
+    name,
+    displayName,
+    type: 'number',
+    default: def,
+    min,
+    max,
+    step,
+    backendKey: backendKey || name,
+    tip: TIPS[name] || ''
+  }
 }
 
 export const ALGORITHMS = [
@@ -45,7 +70,7 @@ export const ALGORITHMS = [
     parameters: [
       numberParam('maxDepth', '最大深度', 4, 1, 8, 1),
       numberParam('minSamplesSplit', '最小分裂样本数', 2, 2, 10, 1),
-      { name: 'criterion', displayName: '分裂准则', type: 'select', default: 'gini', options: ['gini', 'entropy'] }
+      { name: 'criterion', displayName: '分裂准则', type: 'select', default: 'gini', options: ['gini', 'entropy'], tip: TIPS.criterion }
     ]
   },
   {
@@ -66,7 +91,7 @@ export const ALGORITHMS = [
     description: '基于边界的分类器，可调节正则化参数。',
     type: 'classification',
     parameters: [
-      { name: 'kernel', displayName: '核函数', type: 'select', default: 'rbf', options: ['linear', 'rbf', 'poly'] },
+      { name: 'kernel', displayName: '核函数', type: 'select', default: 'rbf', options: ['linear', 'rbf', 'poly'], tip: TIPS.kernel },
       numberParam('c', '正则化参数C', 1, 0.1, 4, 0.1),
       numberParam('gamma', '核宽度 γ', 0.5, 0.05, 2, 0.05),
       numberParam('iterations', '迭代次数', 80, 20, 200, 10, 'steps')

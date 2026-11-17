@@ -12,9 +12,10 @@
         <div class="param-label">
           {{ param.displayName }}
           <span
-            v-if="param.min !== undefined && param.max !== undefined"
+            v-if="param.tip"
             class="info-icon"
-            :title="`${param.min} ~ ${param.max}`"
+            tabindex="0"
+            :data-tip="tooltipOf(param)"
           >i</span>
         </div>
 
@@ -47,6 +48,13 @@
 
 <script setup>
 import { formatParameterValue } from '@/services/algorithms'
+
+function tooltipOf(param) {
+  const range = param.min !== undefined && param.max !== undefined
+    ? `（范围 ${param.min} ~ ${param.max}）`
+    : ''
+  return `${param.tip}${range}`
+}
 
 defineProps({
   algorithm: { type: Object, default: null },
@@ -107,6 +115,7 @@ defineEmits(['parameter-change', 'reset-defaults'])
 }
 
 .info-icon {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -117,6 +126,35 @@ defineEmits(['parameter-change', 'reset-defaults'])
   border: 1px solid #cbd5e1;
   border-radius: 50%;
   cursor: help;
+  outline: none;
+}
+
+/* 自定义提示：原生 title 在部分浏览器里延迟很长甚至不显示 */
+.info-icon::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 150%;
+  left: -10px;
+  width: 190px;
+  padding: 7px 9px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #fff;
+  background: #111827;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  z-index: 30;
+  white-space: normal;
+}
+
+.info-icon:hover::after,
+.info-icon:focus::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 .param-input {
